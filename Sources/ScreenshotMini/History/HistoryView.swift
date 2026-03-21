@@ -162,6 +162,9 @@ private struct HistoryCell: View {
         .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
         .animation(.easeInOut(duration: 0.25), value: isHovered)
         .onHover { isHovered = $0 }
+        .draggable(dragFile()) { if let thumb = manager.thumbnailImage(for: entry) {
+            Image(nsImage: thumb).resizable().frame(width: 100, height: 70).clipShape(RoundedRectangle(cornerRadius: 6))
+        } }
     }
 
     // MARK: - Actions
@@ -190,6 +193,14 @@ private struct HistoryCell: View {
             ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
             : URL(fileURLWithPath: savePath)
         saveImage(image, to: dir)
+    }
+
+    private func dragFile() -> URL {
+        // Use the full image stored in history cache
+        let fullURL = manager.fullImageURL(for: entry)
+        if FileManager.default.fileExists(atPath: fullURL.path) { return fullURL }
+        // Fallback: thumbnail
+        return manager.thumbnailURL(for: entry)
     }
 
     private func relativeDate(_ date: Date) -> String {

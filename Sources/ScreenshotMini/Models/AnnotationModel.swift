@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Shape types
 
 enum AnnotationShape: Equatable, Sendable {
-    case rect, circle, line, arrow, text, freehand, blur
+    case rect, circle, line, arrow, text, freehand, blur, numbered
 }
 
 // MARK: - Blur style
@@ -152,6 +152,10 @@ struct Annotation: Identifiable, Equatable {
                 if distanceToSegment(point: point, from: points[i], to: points[i + 1]) < tolerance { return true }
             }
             return false
+        case .numbered:
+            let size = fontSize * 1.6
+            let circleRect = CGRect(x: start.x, y: start.y, width: size, height: size)
+            return circleRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point)
         }
     }
 

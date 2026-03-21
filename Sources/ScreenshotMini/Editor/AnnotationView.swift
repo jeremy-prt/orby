@@ -17,6 +17,9 @@ struct AnnotationView: View {
         if annotation.shape == .text {
             textView
                 .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
+        } else if annotation.shape == .numbered {
+            numberedView
+                .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         } else if annotation.shape == .blur {
             blurPreview
                 .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
@@ -133,6 +136,23 @@ struct AnnotationView: View {
         }
     }
 
+    @ViewBuilder
+    private var numberedView: some View {
+        let size = annotation.fontSize * 1.6
+        let textColor = textColorForBackground(annotation.color)
+        ZStack {
+            Circle()
+                .fill(annotation.color)
+                .frame(width: size, height: size)
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            Text(annotation.text)
+                .font(.system(size: annotation.fontSize * 0.75, weight: .bold))
+                .foregroundStyle(textColor)
+        }
+        .position(x: annotation.start.x + size / 2, y: annotation.start.y + size / 2)
+        .allowsHitTesting(false)
+    }
+
     private func textColorForBackground(_ color: Color) -> Color {
         let nsColor = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor(color)
         let r = nsColor.redComponent, g = nsColor.greenComponent, b = nsColor.blueComponent
@@ -168,7 +188,7 @@ struct AnnotationView: View {
         case .rect: p.addRect(r)
         case .circle: p.addEllipse(in: r)
         case .line: p.move(to: s); p.addLine(to: e)
-        case .arrow, .text, .freehand, .blur: break
+        case .arrow, .text, .freehand, .blur, .numbered: break
         }
         return p
     }

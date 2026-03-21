@@ -107,6 +107,9 @@ struct EditorView: View {
     @State private var blurRadius: CGFloat = 10
     @State private var blurStyle: BlurStyle = .gaussian
 
+    // Numbered annotation counter
+    @State private var nextNumber: Int = 1
+
     // Background
     @State private var bgConfig = BackgroundConfig()
 
@@ -120,7 +123,7 @@ struct EditorView: View {
         case "rect": .rect; case "circle": .circle
         case "line": .line; case "arrow": .arrow
         case "text": .text; case "draw": .freehand
-        case "blur": .blur
+        case "blur": .blur; case "numbered": .numbered
         default: nil
         }
     }
@@ -142,6 +145,7 @@ struct EditorView: View {
         ("character.textbox", "text", "Text", "T"),
         ("applepencil.gen1", "draw", "Draw", "D"),
         ("eye.slash", "blur", "Blur", "B"),
+        ("number.circle", "numbered", "Number", "N"),
         ("photo.artframe", "background", "Background", "F"),
     ]
 
@@ -177,6 +181,7 @@ struct EditorView: View {
                 Button("") { selectTool("text") }.keyboardShortcut("t", modifiers: []).hidden()
                 Button("") { selectTool("draw") }.keyboardShortcut("d", modifiers: []).hidden()
                 Button("") { selectTool("blur") }.keyboardShortcut("b", modifiers: []).hidden()
+                Button("") { selectTool("numbered") }.keyboardShortcut("n", modifiers: []).hidden()
                 Button("") { selectTool("background") }.keyboardShortcut("f", modifiers: []).hidden()
                 Button("") { selectTool(nil) }.keyboardShortcut(.escape, modifiers: []).hidden()
                 // Zoom
@@ -187,6 +192,8 @@ struct EditorView: View {
                 // Copy/Paste annotations
                 Button("") { copySelectedAnnotation() }.keyboardShortcut("c", modifiers: .command).hidden()
                 Button("") { pasteAnnotation() }.keyboardShortcut("v", modifiers: .command).hidden()
+                // Save (⌘S) — save without closing
+                Button("") { quickSave() }.keyboardShortcut("s", modifiers: .command).hidden()
             }
             .frame(width: 0, height: 0)
         )
@@ -625,6 +632,20 @@ struct EditorView: View {
             return
         }
 
+        // Numbered tool: click to place numbered circle
+        if selectedTool == "numbered" {
+            let size: CGFloat = fontSize * 1.6
+            let ann = Annotation(shape: .numbered, start: pt,
+                                 end: CGPoint(x: pt.x + size, y: pt.y + size),
+                                 color: annotationColor,
+                                 text: "\(nextNumber)", fontSize: fontSize)
+            history.save()
+            history.annotations.append(ann)
+            selectedId = ann.id
+            nextNumber += 1
+            return
+        }
+
         commitTextIfNeeded()
 
         // Try to select an annotation under the click
@@ -995,6 +1016,40 @@ struct EditorView: View {
         guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].blurStyle = style
+    }
+
+    private func quickSave() {
+        var img = buildFinalImage()
+        if !UserDefaults.standard.bool(forKey: "exportRetina") { img = normalizeImageDPI(img) }
+
+        let format = UserDefaults.standard.string(forKey: "imageFormat") ?? "png"
+        let ext: String
+        let fileType: NSBitmapImageRep.FileType
+        switch format {
+        case "jpeg": ext = "jpg"; fileType = .jpeg
+        case "tiff": ext = "tiff"; fileType = .tiff
+        default: ext = "png"; fileType = .png
+        }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.init(filenameExtension: ext)!]
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        panel.nameFieldStringValue = "Screenshot_\(df.string(from: Date())).\(ext)"
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        guard let tiff = img.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let data = bitmap.representation(using: fileType,
+                  properties: fileType == .jpeg ? [.compressionFactor: 0.9] : [:]) else { return }
+        try? data.write(to: url)
+
+        let en = L10n.lang == "en"
+        ToastManager.shared.show(
+            title: en ? "Saved!" : "Sauvegardé !",
+            subtitle: url.lastPathComponent
+        )
     }
 
 }

@@ -84,6 +84,10 @@ class HistoryManager: ObservableObject {
         NSImage(contentsOf: thumbnailURL(for: entry))
     }
 
+    func fullImageURL(for entry: HistoryEntry) -> URL {
+        fullDir.appendingPathComponent("\(entry.id.uuidString).png")
+    }
+
     /// Load full image from history cache, or savedPath fallback
     func fullImage(for entry: HistoryEntry) -> NSImage? {
         let fullURL = fullDir.appendingPathComponent("\(entry.id.uuidString).png")

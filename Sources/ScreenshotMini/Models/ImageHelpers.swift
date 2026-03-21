@@ -74,6 +74,8 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
         case .blur:
             flattenBlur(ann: ann, s: s, e: e, sx: sx, sy: sy, canvasSize: canvasSize,
                         imgSize: imgSize, result: result, hasRotation: hasRotation)
+        case .numbered:
+            flattenNumbered(ann: ann, sx: sx, sy: sy, canvasSize: canvasSize, nsColor: nsColor)
         }
 
         if hasRotation {
@@ -262,6 +264,40 @@ private func flattenFreehand(ann: Annotation, sx: CGFloat, sy: CGFloat, canvasSi
     fp.line(to: last)
     nsColor.setStroke()
     fp.stroke()
+}
+
+private func flattenNumbered(ann: Annotation, sx: CGFloat, sy: CGFloat, canvasSize: CGSize, nsColor: NSColor) {
+    let size = ann.fontSize * 1.6 * sx
+    let cx = ann.start.x * sx + size / 2
+    let cy = (canvasSize.height - ann.start.y) * sy - size / 2
+    let circleRect = NSRect(x: cx - size / 2, y: cy - size / 2, width: size, height: size)
+
+    // Shadow
+    NSGraphicsContext.saveGraphicsState()
+    let shadow = NSShadow()
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
+    shadow.shadowBlurRadius = 2 * sx
+    shadow.shadowOffset = NSSize(width: 0, height: -1 * sy)
+    shadow.set()
+
+    // Filled circle
+    nsColor.setFill()
+    NSBezierPath(ovalIn: circleRect).fill()
+    NSGraphicsContext.restoreGraphicsState()
+
+    // Number text
+    let r = nsColor.usingColorSpace(.deviceRGB) ?? nsColor
+    let lum = 0.299 * r.redComponent + 0.587 * r.greenComponent + 0.114 * r.blueComponent
+    let textColor: NSColor = lum > 0.6 ? .black : .white
+    let fontSize = ann.fontSize * 0.75 * sx
+    let attrs: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
+        .foregroundColor: textColor
+    ]
+    let str = NSAttributedString(string: ann.text, attributes: attrs)
+    let strSize = str.size()
+    let textOrigin = NSPoint(x: cx - strSize.width / 2, y: cy - strSize.height / 2)
+    str.draw(at: textOrigin)
 }
 
 private func flattenBlur(ann: Annotation, s: NSPoint, e: NSPoint, sx: CGFloat, sy: CGFloat,
