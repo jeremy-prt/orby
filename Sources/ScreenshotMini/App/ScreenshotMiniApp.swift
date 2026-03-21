@@ -51,10 +51,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         mgr.onOCR = { [weak self] in
             self?.takeOCR()
         }
+        mgr.onHistory = {
+            HistoryWindow.shared.toggle()
+        }
         mgr.registerHotkey(.fullscreen)
         mgr.registerHotkey(.area)
         mgr.registerHotkey(.window)
         mgr.registerHotkey(.ocr)
+        mgr.registerHotkey(.history)
 
         // If menu bar icon is hidden, open settings on launch so user isn't locked out
         if !UserDefaults.standard.bool(forKey: "showMenuBarIcon") {
@@ -127,6 +131,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        let historyItem = NSMenuItem(title: L10n.lang == "en" ? "Capture history" : "Historique des captures", action: #selector(openHistoryAction), keyEquivalent: "")
+        historyItem.target = self
+        historyItem.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
+        if let combo = mgr.combo(for: .history) { applyKeyEquivalent(combo, to: historyItem) }
+        menu.addItem(historyItem)
+
         let settingsItem = NSMenuItem(title: L10n.menuSettings, action: #selector(openSettings), keyEquivalent: "")
         settingsItem.target = self
         settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
@@ -159,6 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc private func captureAreaAction() { takeArea() }
     @objc private func captureWindowAction() { takeWindow() }
     @objc private func captureOCRAction() { takeOCR() }
+    @objc private func openHistoryAction() { HistoryWindow.shared.toggle() }
 
     @objc func openSettings() {
         if let window = settingsWindow, window.isVisible {
@@ -177,6 +188,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             defer: false
         )
         window.title = L10n.menuSettings
+        window.titleVisibility = .hidden
         window.contentView = hostingView
         window.center()
         window.isReleasedWhenClosed = false

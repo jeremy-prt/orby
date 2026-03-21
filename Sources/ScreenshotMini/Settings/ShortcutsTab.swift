@@ -9,6 +9,9 @@ struct ShortcutsTabView: View {
                 HotkeySettingRow(slot: .window, label: L10n.lang == "en" ? "Window capture" : "Capture de fenêtre")
                 HotkeySettingRow(slot: .ocr, label: L10n.lang == "en" ? "Text capture" : "Capture texte")
             }
+            Section(L10n.lang == "en" ? "General" : "Général") {
+                HotkeySettingRow(slot: .history, label: L10n.lang == "en" ? "History" : "Historique")
+            }
         }
         .formStyle(.grouped)
     }

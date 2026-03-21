@@ -6,6 +6,7 @@ enum HotkeySlot: String, CaseIterable {
     case area = "area"
     case window = "window"
     case ocr = "ocr"
+    case history = "history"
 
     var signature: OSType {
         switch self {
@@ -13,6 +14,7 @@ enum HotkeySlot: String, CaseIterable {
         case .area: OSType(0x53534D32)
         case .window: OSType(0x53534D34)
         case .ocr: OSType(0x53534D33)
+        case .history: OSType(0x53534D35)
         }
     }
 
@@ -22,6 +24,7 @@ enum HotkeySlot: String, CaseIterable {
         case .area: 2
         case .window: 4
         case .ocr: 3
+        case .history: 5
         }
     }
 
@@ -43,6 +46,9 @@ class HotkeyManager: ObservableObject {
     @Published var ocrHotkey: HotkeyCombo? {
         didSet { save(.ocr); registerHotkey(.ocr) }
     }
+    @Published var historyHotkey: HotkeyCombo? {
+        didSet { save(.history); registerHotkey(.history) }
+    }
     @Published var isRecording = false
     @Published var recordingSlot: HotkeySlot?
 
@@ -50,6 +56,7 @@ class HotkeyManager: ObservableObject {
     var onArea: (() -> Void)?
     var onWindow: (() -> Void)?
     var onOCR: (() -> Void)?
+    var onHistory: (() -> Void)?
 
     private var hotkeyRefs: [HotkeySlot: EventHotKeyRef] = [:]
     private var monitor: Any?
@@ -62,6 +69,7 @@ class HotkeyManager: ObservableObject {
         load(.area)
         load(.window)
         load(.ocr)
+        load(.history)
     }
 
     func combo(for slot: HotkeySlot) -> HotkeyCombo? {
@@ -70,6 +78,7 @@ class HotkeyManager: ObservableObject {
         case .area: areaHotkey
         case .window: windowHotkey
         case .ocr: ocrHotkey
+        case .history: historyHotkey
         }
     }
 
@@ -79,6 +88,7 @@ class HotkeyManager: ObservableObject {
         case .area: areaHotkey = combo
         case .window: windowHotkey = combo
         case .ocr: ocrHotkey = combo
+        case .history: historyHotkey = combo
         }
     }
 
@@ -128,6 +138,7 @@ class HotkeyManager: ObservableObject {
                 case 2: mgr.onArea?()
                 case 3: mgr.onOCR?()
                 case 4: mgr.onWindow?()
+                case 5: mgr.onHistory?()
                 default: break
                 }
             }
@@ -203,6 +214,7 @@ class HotkeyManager: ObservableObject {
             case .area: areaHotkey = combo
             case .window: windowHotkey = combo
             case .ocr: ocrHotkey = combo
+            case .history: historyHotkey = combo
             }
         }
     }

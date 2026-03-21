@@ -117,6 +117,12 @@ class ScreenCaptureService {
 
         playCaptureSound()
 
+        // Determine capture type from arguments
+        let captureType: String
+        if baseArgs.contains("-w") { captureType = "window" }
+        else if baseArgs.contains("-s") { captureType = "area" }
+        else { captureType = "fullscreen" }
+
         let defaults = UserDefaults.standard
 
         // Copy to clipboard
@@ -127,9 +133,13 @@ class ScreenCaptureService {
         }
 
         // Save to disk
+        var savedURL: URL? = nil
         if defaults.bool(forKey: "afterCaptureSave") {
-            saveToDisk(image: nsImage)
+            savedURL = saveToDisk(image: nsImage)
         }
+
+        // Record in history
+        HistoryManager.shared.add(image: nsImage, captureType: captureType, savedPath: savedURL)
 
         // Open editor
         if defaults.bool(forKey: "afterCaptureOpenEditor") {
@@ -156,9 +166,10 @@ class ScreenCaptureService {
         return URL(fileURLWithPath: path)
     }
 
-    private func saveToDisk(image: NSImage) {
+    @discardableResult
+    private func saveToDisk(image: NSImage) -> URL? {
         guard let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff) else { return }
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
 
         let format = UserDefaults.standard.string(forKey: "imageFormat") ?? "png"
         let fileType: NSBitmapImageRep.FileType
@@ -169,13 +180,14 @@ class ScreenCaptureService {
         default: fileType = .png; ext = "png"
         }
         let properties: [NSBitmapImageRep.PropertyKey: Any] = fileType == .jpeg ? [.compressionFactor: 0.9] : [:]
-        guard let data = bitmap.representation(using: fileType, properties: properties) else { return }
+        guard let data = bitmap.representation(using: fileType, properties: properties) else { return nil }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let filename = "Screenshot_\(formatter.string(from: Date())).\(ext)"
         let url = savePath.appending(path: filename)
         try? data.write(to: url)
+        return url
     }
 
     private func playCaptureSound() {

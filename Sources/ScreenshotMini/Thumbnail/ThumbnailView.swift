@@ -37,23 +37,9 @@ struct ThumbnailView: View {
                     .frame(width: thumbWidth, height: thumbHeight)
                     .transition(.opacity)
 
-                // Central buttons: Copy + Edit
-                VStack(spacing: 8) {
-                    pillButton(
-                        label: showCopied ? "Copied!" : "Copy",
-                        buttonId: "copy",
-                        action: {
-                            onCopy()
-                            withAnimation(.easeInOut(duration: 0.2)) { showCopied = true }
-                        }
-                    )
-                    pillButton(
-                        label: "Edit",
-                        buttonId: "edit",
-                        action: onEdit
-                    )
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                // Central Edit button
+                pillButton(label: "Edit", buttonId: "edit", action: onEdit)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
 
                 // Corner buttons
                 VStack {
@@ -72,8 +58,16 @@ struct ThumbnailView: View {
                     }
                     Spacer()
                     HStack {
-                        cornerButton(icon: "square.and.arrow.down.fill", buttonId: "save", action: onSave)
+                        cornerButton(
+                            icon: showCopied ? "checkmark" : "doc.on.doc.fill",
+                            buttonId: "copy",
+                            action: {
+                                onCopy()
+                                withAnimation(.easeInOut(duration: 0.2)) { showCopied = true }
+                            }
+                        )
                         Spacer()
+                        cornerButton(icon: "square.and.arrow.down.fill", buttonId: "save", action: onSave)
                     }
                 }
                 .padding(6)
