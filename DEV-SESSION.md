@@ -7,10 +7,11 @@ L'app fonctionne, est publiee sur GitHub avec release v1.0.0 et landing page.
 ### Ce qui marche bien
 
 - **Capture** : fullscreen, zone, OCR — raccourcis globaux configurables
-- **Preview flottante** : copy, edit, save, pin, drag & drop, swipe dismiss, tooltips, curseur arrow force
-- **Editeur** : crop (avec undo), rectangle, cercle, ligne, fleche (4 styles + courbe Bezier), texte, dessin libre, flou — avec selection, deplacement, resize, rotation, undo/redo (⌘Z/⌘⇧Z), delete, fleches clavier, copy/paste (⌘C/⌘V), option-drag duplicate
+- **Preview flottante** : Edit (pill centre), Copy (icone bas-gauche), Save (icone bas-droite), Pin/Close (coins haut), drag & drop, swipe dismiss, tooltips, curseur arrow force
+- **Editeur** : crop (avec undo), rectangle, cercle, ligne, fleche (4 styles + courbe Bezier), texte, dessin libre, flou, background — avec selection, deplacement, resize, rotation, undo/redo (⌘Z/⌘⇧Z), delete, fleches clavier, copy/paste (⌘C/⌘V), option-drag duplicate
+- **Background** : fond degrade (18 presets) ou couleur unie (12 + custom), padding %, coins arrondis %, ombre. Preview live (scaleEffect, dw/dh stables). Export via renderWithBackground
 - **Editeur UI** : dark mode, toolbar alignee avec traffic lights via NSToolbar unifiedCompact, raccourcis clavier (V/C/R/O/L/A/T/D/B/Esc), tooltips custom avec shortcuts, outil curseur par defaut
-- **Zoom editeur** : pinch trackpad (MagnifyGesture), ⌘+ / ⌘- / ⌘0, ⌘+scroll to zoom, scroll pour panner quand zoom > 1, indicateur % cliquable dans la toolbar
+- **Zoom editeur** : pinch trackpad, ⌘+ / ⌘- / ⌘0, ⌘+scroll to zoom, scroll pour panner quand zoom > 1, indicateur % dans la toolbar, zoom min 100%, pan clamp aux bords
 - **Annotations** : color picker compact (cercle unique + popover preset + custom), slider epaisseur (triangle), fill modes (outline/semi/solid), 4 styles de fleche (outline/thin/filled/double), fleches courbees avec point de controle Bezier
 - **Rotation** : handle `.rotating` positionne au-dessus du bounding box (suit la rotation), curseur fleche circulaire dessine en code (`rotateCursor`)
 - **Outil Flou** : gaussian blur + pixelate via CIFilter, preview en temps reel, rayon et style configurables
@@ -47,7 +48,7 @@ L'app fonctionne, est publiee sur GitHub avec release v1.0.0 et landing page.
 
 ### Architecture des fichiers
 
-27 fichiers dans 7 sous-repertoires :
+35 fichiers dans 7 sous-repertoires :
 
 ```
 Sources/ScreenshotMini/
@@ -56,16 +57,24 @@ Sources/ScreenshotMini/
 │   └── Constants.swift            # brandPurple (#9F01A0)
 ├── Editor/
 │   ├── EditorWindow.swift         # NSWindow + NSToolbar unifiedCompact, traffic lights alignment
-│   ├── EditorView.swift           # Canvas, toolbar SwiftUI, gestes (draw/move/resize/rotate/crop/zoom), undo, copy/paste, option-drag
+│   ├── EditorView.swift           # Canvas, toolbar SwiftUI, gestes (draw/move/resize/rotate/crop/zoom), undo, copy/paste, option-drag, background
 │   ├── AnnotationToolbar.swift    # Floating toolbar : color picker, thickness slider, fill/arrow/blur style
-│   ├── AnnotationView.swift       # Rendu Canvas : rect/circle/line/freehand, 4 styles fleche, Bezier, blur
-│   ├── AnnotationOverlays.swift   # HoverOverlay, SelectionOverlay, TextEditingOverlay, CropToolbar, CropMask
+│   ├── AnnotationView.swift       # Rendu Canvas : rect/circle/line/freehand, 4 styles fleche, Bezier, texte, blur preview
+│   ├── BackgroundPanel.swift      # Panel config background : onglets degrade/uni, sliders espacement/coins, toggle ombre
+│   ├── BlurRegionView.swift       # Rendu live blur CIFilter (gaussian/pixelate) sur region de l'image
+│   ├── FreehandPreview.swift      # Preview du trait pendant le dessin libre
+│   ├── SelectionOverlay.swift     # HoverOverlay + SelectionOverlay (handles, rotation)
+│   ├── TextEditingOverlay.swift   # MultilineTextField (NSViewRepresentable) + overlay edition texte
+│   ├── CropViews.swift            # CropToolbar (apply/cancel) + CropMask (eoFill)
+│   ├── ScrollWheelView.swift      # ScrollWheelView (NSViewRepresentable), ZoomIndicator
 │   ├── ToolbarButton.swift        # ToolbarButton avec tooltip + shortcut
 │   └── DragMeButton.swift         # Bouton drag & drop image depuis l'editeur (ferme la fenetre apres drop)
 ├── Models/
 │   ├── AnnotationModel.swift      # Annotation struct, AnnotationShape, ArrowStyle, BlurStyle, ResizeHandle (.rotating), hit test, resize, rotate, move, duplicate
 │   ├── AnnotationHistory.swift    # AnnotationHistory (undo/redo stack)
-│   └── ImageHelpers.swift         # flattenAnnotations, cropImage, saveImage, normalizeImageDPI, CanvasInteraction
+│   ├── BackgroundConfig.swift     # BackgroundType, BackgroundConfig, gradientPresets, solidColorPresets, Color(hex:)
+│   ├── ImageHelpers.swift         # flattenAnnotations, cropImage, CanvasInteraction
+│   └── ImageSaveService.swift     # saveImage, normalizeImageDPI, uniqueDragFilename, DateFormatter
 ├── Services/
 │   ├── HotkeyManager.swift        # Multi-hotkeys Carbon (fullscreen/area/OCR), HotkeySlot, UCKeyTranslate AZERTY
 │   ├── ScreenCaptureService.swift  # screencapture CLI (fullscreen/area/OCR), post-capture actions, son
@@ -102,8 +111,8 @@ docs/                          # Landing page + guide install
 - **Curseur preview** : `NSEvent.addGlobalMonitorForEvents(.mouseMoved)` force arrow car nonactivatingPanel
 - **Curseur editeur** : `onContinuousHover` + `NSCursor` (fonctionne car NSWindow standard)
 - **Raccourcis clavier** : `UCKeyTranslate` pour AZERTY, `keyEquivalent` natif dans le menu. Dans l'editeur, hidden Buttons avec `.keyboardShortcut` pour V/C/R/O/L/A/T/D/B/Esc + ⌘C/⌘V (copy/paste annotation) + ⌘+/⌘-/⌘0 (zoom).
-- **Zoom** : `MagnifyGesture` pour pinch trackpad, `ScrollWheelView` (NSView wrappee) pour capturer scroll events — pan quand zoom > 1, zoom avec ⌘ enfonce. Boutons toolbar + hidden Buttons pour les raccourcis clavier.
-- **Rotation** : `ResizeHandle.rotating` = handle positionne 25pt au-dessus du bounding box centre, tourne avec l'annotation (calcul de rotation dans `handleAt`). `CanvasInteraction.rotating(UUID)` dans handleDrag. Curseur fleche circulaire `rotateCursor` dessine programmatiquement (arc + fleche).
+- **Zoom** : `NSEvent.addLocalMonitorForEvents(.scrollWheel)` pour ⌘+scroll zoom et pan, `NSEvent.addLocalMonitorForEvents(.magnify)` pour pinch trackpad. Zoom min 1.0, pan clamp via `clampPan()`. Boutons toolbar + hidden Buttons pour ⌘+/⌘-/⌘0.
+- **Rotation** : `ResizeHandle.rotating` = handle positionne 25pt au-dessus du bounding box centre, tourne avec l'annotation (calcul de rotation dans `handleAt`). `CanvasInteraction.rotating(UUID)` dans handleDrag. Curseur SF Symbol `arrow.trianglehead.clockwise.rotate.90` avec contour blanc.
 - **Crop undo** : push dans `imageUndoStack: [(NSImage, [Annotation])]`. `history.undo()` prend priorite ; si vide, pop imageUndoStack.
 - **Bezier fleche** : `controlPoint` optionnel dans `Annotation`. Drag du midpoint handle → update controlPoint. Rendu via `addQuadCurve`.
 - **Fill mode** : `filled` + `solidFill` booleans → `FillMode` enum (.outline / .semiFilled / .solidFilled) dans l'UI.
