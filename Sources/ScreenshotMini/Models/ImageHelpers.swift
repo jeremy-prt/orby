@@ -5,15 +5,38 @@ import CoreImage.CIFilterBuiltins
 
 // MARK: - Save helper
 
-/// Set image DPI to 72 so pixel dimensions match point dimensions (1x, no Retina doubling)
+/// Downscale Retina image to 1x: pixel count matches point dimensions
 func normalizeImageDPI(_ image: NSImage) -> NSImage {
-    guard let tiff = image.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiff) else { return image }
-    let pixelW = bitmap.pixelsWide
-    let pixelH = bitmap.pixelsHigh
-    bitmap.size = NSSize(width: pixelW, height: pixelH)
-    let result = NSImage(size: NSSize(width: pixelW, height: pixelH))
-    result.addRepresentation(bitmap)
+    let pointSize = image.size
+    let targetW = Int(pointSize.width)
+    let targetH = Int(pointSize.height)
+    guard targetW > 0, targetH > 0 else { return image }
+
+    // Create a bitmap at exactly 1x pixel resolution
+    guard let bitmapRep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: targetW,
+        pixelsHigh: targetH,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ) else { return image }
+
+    bitmapRep.size = pointSize
+
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
+    image.draw(in: NSRect(origin: .zero, size: pointSize),
+               from: NSRect(origin: .zero, size: pointSize),
+               operation: .copy, fraction: 1.0)
+    NSGraphicsContext.restoreGraphicsState()
+
+    let result = NSImage(size: pointSize)
+    result.addRepresentation(bitmapRep)
     return result
 }
 

@@ -9,6 +9,7 @@ struct CaptureTabView: View {
     @AppStorage("afterCaptureCopyClipboard") private var afterCaptureCopyClipboard = true
     @AppStorage("afterCaptureSave") private var afterCaptureSave = false
     @AppStorage("afterCaptureOpenEditor") private var afterCaptureOpenEditor = false
+    @AppStorage("exportRetina") private var exportRetina = true
 
     var body: some View {
         let en = L10n.lang == "en"
@@ -25,6 +26,21 @@ struct CaptureTabView: View {
                      : "Actions effectuées automatiquement après chaque capture")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(en ? "Resolution" : "Résolution") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker(en ? "Export quality" : "Qualité d'export", selection: $exportRetina) {
+                        Text("Retina (2x)").tag(true)
+                        Text("Standard (1x)").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    Text(exportRetina
+                         ? (en ? "Full Retina resolution — best quality, larger files" : "Résolution Retina complète — meilleure qualité, fichiers plus lourds")
+                         : (en ? "Standard resolution — smaller files" : "Résolution standard — fichiers plus légers"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if afterCaptureShowPreview {
