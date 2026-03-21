@@ -141,6 +141,8 @@ struct EditorView: View {
 
             Divider().frame(height: 18).padding(.horizontal, 4)
             DragMeButton(image: currentImage)
+                .frame(width: 28, height: 28)
+                .background(NativeTooltip(tooltip: "Drag to export"))
 
             Spacer()
 
