@@ -263,6 +263,13 @@ struct EditorView: View {
                 Image(systemName: "doc.on.doc").font(.system(size: 13)).frame(width: 28, height: 28)
             }.buttonStyle(.plain).help(L10n.editorCopy)
 
+            // Share
+            ShareButton {
+                var img = buildFinalImage()
+                if !UserDefaults.standard.bool(forKey: "exportRetina") { img = normalizeImageDPI(img) }
+                return img
+            }
+
             // Save
             Button {
                 let img = buildFinalImage()
