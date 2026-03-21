@@ -5,9 +5,22 @@ struct GeneralTabView: View {
     @AppStorage("ocrLanguage") private var ocrLanguage = "fr"
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("playSound") private var playSound = true
+    @AppStorage("appTheme") private var appTheme = "system"
 
     var body: some View {
         Form {
+            Section(L10n.lang == "en" ? "Appearance" : "Apparence") {
+                Picker(L10n.lang == "en" ? "Theme" : "Thème", selection: $appTheme) {
+                    Text(L10n.lang == "en" ? "System" : "Système").tag("system")
+                    Text(L10n.lang == "en" ? "Light" : "Clair").tag("light")
+                    Text(L10n.lang == "en" ? "Dark" : "Sombre").tag("dark")
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: appTheme) { _, newValue in
+                    applyTheme(newValue)
+                }
+            }
+
             Section(L10n.lang == "en" ? "Menu bar" : "Barre des menus") {
                 Toggle(
                     L10n.lang == "en" ? "Show icon in menu bar" : "Afficher l'icône dans la barre des menus",

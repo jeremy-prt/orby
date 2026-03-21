@@ -20,7 +20,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var menuBarObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UserDefaults.standard.register(defaults: ["dismissDelay": 5.0, "playSound": true, "showMenuBarIcon": true])
+        UserDefaults.standard.register(defaults: ["dismissDelay": 5.0, "playSound": true, "showMenuBarIcon": true, "appTheme": "system"])
+        applyTheme(UserDefaults.standard.string(forKey: "appTheme") ?? "system")
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
