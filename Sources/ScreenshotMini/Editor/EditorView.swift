@@ -260,6 +260,7 @@ struct EditorView: View {
                         TextEditingOverlay(
                             text: $editingText,
                             annotation: ann,
+                            canvasSize: CGSize(width: dw, height: dh),
                             onCommit: { commitTextEdit() }
                         )
                         .frame(width: dw, height: dh)
@@ -288,6 +289,7 @@ struct EditorView: View {
                         .onChanged { v in handleDrag(v, dw: dw, dh: dh, ox: ox, oy: oy) }
                         .onEnded { v in handleDragEnd(v, dw: dw, dh: dh, ox: ox, oy: oy) }
                 )
+                .onTapGesture(count: 2) { loc in handleDoubleTap(loc, dw: dw, dh: dh, ox: ox, oy: oy) }
                 .onTapGesture { loc in handleTap(loc, dw: dw, dh: dh, ox: ox, oy: oy) }
                 .onContinuousHover { phase in
                     switch phase {
@@ -471,6 +473,18 @@ struct EditorView: View {
         interaction = .none
     }
 
+    private func handleDoubleTap(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {
+        let pt = canvasPoint(location, dw: dw, dh: dh, ox: ox, oy: oy)
+        // Double-click on text → enter edit mode
+        if let hit = history.annotations.last(where: { $0.hitTest(pt) }),
+           hit.shape == .text, editingTextId == nil {
+            selectedId = hit.id
+            editingTextId = hit.id
+            editingText = hit.text
+            selectedTool = "cursor"
+        }
+    }
+
     private func handleTap(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {
         let pt = canvasPoint(location, dw: dw, dh: dh, ox: ox, oy: oy)
 
@@ -500,14 +514,8 @@ struct EditorView: View {
             return
         }
 
-        // Double-click on text annotation to re-edit
-        if let hit = history.annotations.last(where: { $0.hitTest(pt) }),
-           hit.shape == .text, editingTextId == nil {
-            selectedId = hit.id
-            editingTextId = hit.id
-            editingText = hit.text
-            return
-        }
+        // Single click on text: just select it (don't enter edit mode)
+        // Edit mode is triggered by double-click (see onTapGesture count:2 below)
 
         commitTextIfNeeded()
 

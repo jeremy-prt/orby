@@ -87,9 +87,16 @@ struct SelectionOverlay: View {
 struct TextEditingOverlay: View {
     @Binding var text: String
     let annotation: Annotation
+    var canvasSize: CGSize = .zero
     let onCommit: () -> Void
 
     @FocusState private var isFocused: Bool
+
+    private var rotationAnchor: UnitPoint {
+        guard canvasSize.width > 0 && canvasSize.height > 0 else { return .center }
+        let r = annotation.boundingRect
+        return UnitPoint(x: r.midX / canvasSize.width, y: r.midY / canvasSize.height)
+    }
 
     private var liveWidth: CGFloat {
         guard !text.isEmpty else { return 30 }
@@ -124,6 +131,7 @@ struct TextEditingOverlay: View {
             .position(x: annotation.start.x + editW / 2,
                       y: annotation.start.y + editH / 2)
         }
+        .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         .allowsHitTesting(true)
         .onSubmit { onCommit() }
         .onAppear {
