@@ -410,12 +410,14 @@ struct EditorView: View {
 
         commitTextIfNeeded()
 
-        if activeShapeTool == nil && selectedTool != "crop" {
-            if let hit = history.annotations.last(where: { $0.hitTest(pt) }) {
-                selectedId = hit.id
-            } else {
-                selectedId = nil
-            }
+        // Try to select an annotation under the click
+        if let hit = history.annotations.last(where: { $0.hitTest(pt) }) {
+            selectedId = hit.id
+            selectedTool = "cursor"
+        } else if selectedTool != "crop" {
+            // Clicked on empty space → switch to cursor tool
+            selectedId = nil
+            selectedTool = "cursor"
         }
     }
 
