@@ -28,7 +28,7 @@ class HistoryManager: ObservableObject {
 
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("ScreenshotMini", isDirectory: true)
+            .appendingPathComponent("Orby", isDirectory: true)
         historyDir = appSupport.appendingPathComponent("history", isDirectory: true)
         thumbDir = historyDir.appendingPathComponent("thumbnails", isDirectory: true)
         fullDir = historyDir.appendingPathComponent("full", isDirectory: true)

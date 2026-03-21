@@ -3,14 +3,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "ScreenshotMini",
+    name: "Orby",
     platforms: [
         .macOS(.v15)
     ],
     targets: [
         .executableTarget(
-            name: "ScreenshotMini",
-            path: "Sources/ScreenshotMini",
+            name: "Orby",
+            path: "Sources/Orby",
             swiftSettings: [
                 .unsafeFlags(["-F", "Frameworks"])
             ],

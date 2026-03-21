@@ -105,7 +105,7 @@ final class DragMeNSView: NSView, NSDraggingSource {
         Task { @MainActor in
             if operation != [] {
                 // Successful drop — close editor, show toast
-                if let win = NSApp.windows.first(where: { $0.title == "Screenshot Mini" }) {
+                if let win = NSApp.windows.first(where: { $0.title == "Orby" }) {
                     win.close()
                 }
                 let en = L10n.lang == "en"
@@ -115,7 +115,7 @@ final class DragMeNSView: NSView, NSDraggingSource {
                 )
             } else {
                 // Cancelled — restore window
-                if let win = NSApp.windows.first(where: { $0.title == "Screenshot Mini" }) {
+                if let win = NSApp.windows.first(where: { $0.title == "Orby" }) {
                     win.makeKeyAndOrderFront(nil)
                 }
             }

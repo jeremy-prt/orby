@@ -17,6 +17,22 @@ struct NativeTooltip: NSViewRepresentable {
     }
 }
 
+// MARK: - Hover highlight modifier for plain toolbar buttons
+
+struct ToolbarHover: ViewModifier {
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(RoundedRectangle(cornerRadius: 6).fill(isHovered ? brandPurple.opacity(0.1) : Color.clear))
+            .onHover { isHovered = $0 }
+    }
+}
+
+extension View {
+    func toolbarHover() -> some View { modifier(ToolbarHover()) }
+}
+
 // MARK: - Toolbar Button with native tooltip
 
 struct ToolbarButton: View {

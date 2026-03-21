@@ -2,7 +2,7 @@ import SwiftUI
 import Sparkle
 
 @main
-struct ScreenshotMiniApp: App {
+struct OrbyApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
     var body: some Scene {

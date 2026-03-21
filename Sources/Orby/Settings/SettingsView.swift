@@ -40,6 +40,8 @@ struct SettingsView: View {
                     CaptureTabView()
                 case .sauvegarde:
                     SaveTabView()
+                case .about:
+                    AboutTabView()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

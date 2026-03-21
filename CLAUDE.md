@@ -1,4 +1,4 @@
-# Screenshot Mini
+# Orby
 
 App macOS menu bar de capture d'ecran, inspiree de CleanShot X en plus simple.
 
@@ -18,9 +18,9 @@ App macOS menu bar de capture d'ecran, inspiree de CleanShot X en plus simple.
 39 fichiers dans 8 sous-repertoires :
 
 ```
-Sources/ScreenshotMini/
+Sources/Orby/
 ├── App/
-│   ├── ScreenshotMiniApp.swift    # @main, AppDelegate, menu bar, routing des hotkeys
+│   ├── OrbyApp.swift    # @main, AppDelegate, menu bar, routing des hotkeys
 │   └── Constants.swift            # brandPurple (#9F01A0)
 ├── Editor/
 │   ├── EditorWindow.swift         # NSWindow + NSToolbar unifiedCompact, traffic lights alignment
@@ -116,7 +116,7 @@ docs/                          # Landing page + guide install + appcast.xml
 - **Historique des captures** :
   - NSPanel flottant avec grille de thumbnails (style ThumbnailView : blur + glass au hover)
   - Boutons hover : Edit (centre), Copy (bas-gauche), Save (bas-droite), Delete (haut-droite)
-  - Max 12 captures, images completes + thumbnails dans ~/Library/Application Support/ScreenshotMini/history/
+  - Max 12 captures, images completes + thumbnails dans ~/Library/Application Support/Orby/history/
   - Clean complet au relancement de l'app
   - Accessible via menu bar + raccourci global configurable
   - Drag & drop depuis l'historique vers Finder/navigateur/apps
@@ -138,7 +138,7 @@ docs/                          # Landing page + guide install + appcast.xml
 ## Build & Dev
 
 ```bash
-cd /Users/jeremy/Documents/code/2025/projets_pro/ScreenshotMini
+cd /Users/jeremy/Documents/code/2025/projets_pro/Orby
 bash build-app.sh   # compile + signe certificat dev + update /Applications + relance
 bash build-dmg.sh   # compile + re-signe ad-hoc + cree .dmg pour distribution
 ```
@@ -146,7 +146,7 @@ bash build-dmg.sh   # compile + re-signe ad-hoc + cree .dmg pour distribution
 ## Code signing
 
 **Dev (build-app.sh)** :
-- Signe avec le certificat local **"ScreenshotMini Dev"** (racine auto-signee, Keychain session)
+- Signe avec le certificat local **"Orby Dev"** (racine auto-signee, Keychain session)
 - Signature stable entre les builds → permissions TCC (Screen Recording) persistent
 - Ne PAS revenir a `-s -` (ad-hoc) pour le dev sinon TCC redemande a chaque rebuild
 

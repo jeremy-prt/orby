@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
     <channel>
-        <title>Screenshot Mini Updates</title>
+        <title>Orby Updates</title>
         <language>en</language>
         <item>
             <title>Version 1.2.0</title>
@@ -23,7 +23,7 @@
             ]]></description>
             <pubDate>Sat, 21 Mar 2026 18:30:00 +0100</pubDate>
             <enclosure
-                url="https://github.com/jeremy-prt/screenshot-mini/releases/download/v1.2.0/ScreenshotMini.dmg"
+                url="https://github.com/jeremy-prt/orby/releases/download/v1.2.0/Orby.dmg"
                 sparkle:edSignature="4u14r272gK/tqBCXIW7A9bnb91nuIiDUU5fu3C/I9Ilj6nwxhRScvZmnWEMQW9DXrSBmDQd0bN1CQ5SUIiONCw=="
                 length="2816397"
                 type="application/octet-stream"

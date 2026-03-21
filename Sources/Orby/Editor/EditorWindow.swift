@@ -25,7 +25,7 @@ class EditorWindow {
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered, defer: false
         )
-        win.title = "Screenshot Mini"
+        win.title = "Orby"
         win.titlebarAppearsTransparent = true
         win.titleVisibility = .hidden
         win.styleMask.insert(.fullSizeContentView)

@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Screenshot Mini"
+APP_NAME="Orby"
 BUILD_DIR=".build"
 APP_BUNDLE="$BUILD_DIR/app/$APP_NAME.app"
-DMG_OUTPUT="$BUILD_DIR/ScreenshotMini.dmg"
+DMG_OUTPUT="$BUILD_DIR/Orby.dmg"
 BG_IMAGE="$BUILD_DIR/dmg-bg.png"
 
 # Step 1: Build the app

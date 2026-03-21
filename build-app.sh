@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Screenshot Mini"
-BUNDLE_ID="com.local.ScreenshotMini"
+APP_NAME="Orby"
+BUNDLE_ID="com.local.Orby"
 BUILD_DIR=".build/app"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
@@ -16,7 +16,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 
 # Copy binary
-cp .build/release/ScreenshotMini "$APP_BUNDLE/Contents/MacOS/ScreenshotMini"
+cp .build/release/Orby "$APP_BUNDLE/Contents/MacOS/Orby"
 
 # Copy Sparkle framework
 if [ -d "Frameworks/Sparkle.framework" ]; then
@@ -38,11 +38,11 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.local.ScreenshotMini</string>
+    <string>com.local.Orby</string>
     <key>CFBundleName</key>
-    <string>Screenshot Mini</string>
+    <string>Orby</string>
     <key>CFBundleDisplayName</key>
-    <string>Screenshot Mini</string>
+    <string>Orby</string>
     <key>CFBundleVersion</key>
     <string>2</string>
     <key>CFBundleShortVersionString</key>
@@ -50,7 +50,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>ScreenshotMini</string>
+    <string>Orby</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
@@ -60,7 +60,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <key>SUPublicEDKey</key>
     <string>4NnmxyV0FR0GIFCf0hShB1k4vSkYsl5D55knxLeopgQ=</string>
     <key>SUFeedURL</key>
-    <string>https://jeremy-prt.github.io/screenshot-mini/appcast.xml</string>
+    <string>https://jeremy-prt.github.io/orby/appcast.xml</string>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
 </dict>
@@ -68,20 +68,19 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 PLIST
 
 # Sign with stable dev certificate (preserves TCC permissions across rebuilds)
-codesign --force --deep -s "ScreenshotMini Dev" "$APP_BUNDLE"
+codesign --force --deep -s "Orby Dev" "$APP_BUNDLE" 2>/dev/null || codesign --force --deep -s - "$APP_BUNDLE"
 
 INSTALLED="/Applications/$APP_NAME.app"
 if [ -d "$INSTALLED" ]; then
     echo "Updating installed app..."
     pkill -f "$APP_NAME" 2>/dev/null || true
     sleep 0.5
-    # Copy and re-sign with same stable certificate to preserve TCC permissions
-    cp "$APP_BUNDLE/Contents/MacOS/ScreenshotMini" "$INSTALLED/Contents/MacOS/ScreenshotMini"
+    cp "$APP_BUNDLE/Contents/MacOS/Orby" "$INSTALLED/Contents/MacOS/Orby"
     cp "$APP_BUNDLE/Contents/Info.plist" "$INSTALLED/Contents/Info.plist"
     mkdir -p "$INSTALLED/Contents/Frameworks"
     rm -rf "$INSTALLED/Contents/Frameworks/Sparkle.framework"
     cp -R "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" "$INSTALLED/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true
-    codesign --force --deep -s "ScreenshotMini Dev" "$INSTALLED"
+    codesign --force --deep -s "Orby Dev" "$INSTALLED" 2>/dev/null || codesign --force --deep -s - "$INSTALLED"
     xattr -cr "$INSTALLED" 2>/dev/null || true
     echo "Updated. Relaunching..."
     open "$INSTALLED"

@@ -54,7 +54,7 @@ enum ImageFormat: String, CaseIterable {
 // MARK: - Settings Tabs
 
 enum SettingsTab: String, CaseIterable {
-    case general, raccourcis, capture, sauvegarde
+    case general, raccourcis, capture, sauvegarde, about
 
     var icon: String {
         switch self {
@@ -62,6 +62,7 @@ enum SettingsTab: String, CaseIterable {
         case .raccourcis: "keyboard"
         case .capture: "camera.viewfinder"
         case .sauvegarde: "folder"
+        case .about: "info.circle"
         }
     }
 
@@ -71,6 +72,7 @@ enum SettingsTab: String, CaseIterable {
         case .raccourcis: L10n.shortcut
         case .capture: L10n.settingsCapture
         case .sauvegarde: L10n.settingsSave
+        case .about: L10n.lang == "en" ? "About" : "À propos"
         }
     }
 }

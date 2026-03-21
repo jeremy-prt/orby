@@ -14,6 +14,7 @@ struct ShareButton: View {
                 .frame(width: 28, height: 28)
         }
         .buttonStyle(.plain)
+        .toolbarHover()
         .help(L10n.lang == "en" ? "Share" : "Partager")
         .background(ShareAnchor(nsView: anchorView))
     }
