@@ -30,6 +30,7 @@ struct EditorView: View {
     @State private var annotationColor: Color = .red
     @State private var annotationLineWidth: CGFloat = 3
     @State private var annotationFilled: Bool = false
+    @State private var annotationSolidFill: Bool = false
     @State private var fontSize: CGFloat = 20
     @State private var arrowStyle: ArrowStyle = .thin
 
@@ -317,7 +318,8 @@ struct EditorView: View {
                 selectedId = nil
                 commitTextIfNeeded()
                 interaction = .drawing(Annotation(shape: shape, start: start, end: current,
-                                                  color: annotationColor, lineWidth: annotationLineWidth, filled: annotationFilled,
+                                                  color: annotationColor, lineWidth: annotationLineWidth,
+                                                  filled: annotationFilled, solidFill: annotationSolidFill,
                                                   arrowStyle: shape == .arrow ? arrowStyle : .thin))
             }
             // Priority 5: Deselect if clicking on nothing
@@ -515,6 +517,7 @@ struct EditorView: View {
         }
         return Annotation(shape: shape, start: .zero, end: .zero,
                           color: annotationColor, lineWidth: annotationLineWidth,
+                          filled: annotationFilled, solidFill: annotationSolidFill,
                           fontSize: fontSize, arrowStyle: arrowStyle)
     }
 
@@ -564,19 +567,18 @@ struct EditorView: View {
     }
 
     private func setAnnotationFillMode(_ mode: FillMode) {
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
-        history.save()
         switch mode {
         case .outline:
-            history.annotations[idx].filled = false
-            history.annotations[idx].solidFill = false
+            annotationFilled = false; annotationSolidFill = false
         case .semiFilled:
-            history.annotations[idx].filled = true
-            history.annotations[idx].solidFill = false
+            annotationFilled = true; annotationSolidFill = false
         case .solidFilled:
-            history.annotations[idx].filled = true
-            history.annotations[idx].solidFill = true
+            annotationFilled = true; annotationSolidFill = true
         }
+        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        history.save()
+        history.annotations[idx].filled = annotationFilled
+        history.annotations[idx].solidFill = annotationSolidFill
     }
 
     private func setAnnotationFontSize(_ size: CGFloat) {
