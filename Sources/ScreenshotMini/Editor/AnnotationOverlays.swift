@@ -305,18 +305,17 @@ struct ScrollWheelView: NSViewRepresentable {
 final class ScrollWheelNSView: NSView {
     var onScroll: ((_ dx: CGFloat, _ dy: CGFloat, _ phase: ScrollPhase) -> Void)?
 
+    override var acceptsFirstResponder: Bool { true }
+
     override func scrollWheel(with event: NSEvent) {
-        // Cmd+scroll = zoom, pinch magnify = zoom (phase changed events)
         if event.modifierFlags.contains(.command) {
             onScroll?(event.scrollingDeltaX, event.scrollingDeltaY, .zoom)
         } else {
-            // Normal two-finger scroll = pan
             onScroll?(event.scrollingDeltaX, event.scrollingDeltaY, .scroll)
         }
     }
 
     override func magnify(with event: NSEvent) {
-        // Pinch-to-zoom on trackpad
         onScroll?(0, event.magnification * 100, .zoom)
     }
 }

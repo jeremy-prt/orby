@@ -75,6 +75,8 @@ struct EditorView: View {
     // Zoom & pan
     @State private var zoomLevel: CGFloat = 1.0
     @State private var panOffset: CGSize = .zero
+    @State private var scrollMonitor: Any? = nil
+    @State private var magnifyMonitor: Any? = nil
 
     // Text editing
     @State private var editingTextId: UUID? = nil
@@ -366,19 +368,11 @@ struct EditorView: View {
                         hoveredId = nil
                     }
                 }
-                .onAppear { canvasSize = CGSize(width: dw, height: dh) }
-                .background(
-                    ScrollWheelView { dx, dy, phase in
-                        if phase == .zoom {
-                            let factor = 1.0 + dy * 0.01
-                            zoomLevel = max(0.25, min(10, zoomLevel * factor))
-                        } else {
-                            // Always pan with trackpad scroll
-                            panOffset.width += dx
-                            panOffset.height += dy
-                        }
-                    }
-                )
+                .onAppear {
+                    canvasSize = CGSize(width: dw, height: dh)
+                    setupScrollMonitors()
+                }
+                .onDisappear { removeScrollMonitors() }
             }
 
             // Crop toolbar (top-right)
@@ -408,13 +402,17 @@ struct EditorView: View {
                 .padding(8)
             }
         }
+        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity).layoutPriority(1)
     }
 
     // MARK: - Gesture handling
 
     private func canvasPoint(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) -> CGPoint {
-        CGPoint(x: max(0, min(location.x - ox, dw)), y: max(0, min(location.y - oy, dh)))
+        // Account for zoom scale and pan offset
+        let x = (location.x - ox - panOffset.width) / zoomLevel + (dw - dw / zoomLevel) / 2
+        let y = (location.y - oy - panOffset.height) / zoomLevel + (dh - dh / zoomLevel) / 2
+        return CGPoint(x: max(0, min(x, dw)), y: max(0, min(y, dh)))
     }
 
     private func handleDrag(_ value: DragGesture.Value, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {
@@ -631,18 +629,59 @@ struct EditorView: View {
     }
 
     private func zoomIn() {
-        withAnimation(.easeOut(duration: 0.15)) { zoomLevel = min(10, zoomLevel * 1.25) }
+        withAnimation(.easeOut(duration: 0.15)) {
+            zoomLevel = min(10, zoomLevel * 1.25)
+            clampPan()
+        }
     }
 
     private func zoomOut() {
         withAnimation(.easeOut(duration: 0.15)) {
-            zoomLevel = max(0.25, zoomLevel / 1.25)
-            if zoomLevel <= 1.05 { panOffset = .zero }
+            zoomLevel = max(1.0, zoomLevel / 1.25)
+            clampPan()
         }
     }
 
     private func zoomReset() {
         withAnimation(.easeOut(duration: 0.2)) { zoomLevel = 1.0; panOffset = .zero }
+    }
+
+    /// Clamp pan offset so the image edges don't go past the viewport center
+    private func clampPan() {
+        if zoomLevel <= 1.0 {
+            panOffset = .zero
+            return
+        }
+        let maxPanX = canvasSize.width * (zoomLevel - 1) / 2
+        let maxPanY = canvasSize.height * (zoomLevel - 1) / 2
+        panOffset.width = max(-maxPanX, min(maxPanX, panOffset.width))
+        panOffset.height = max(-maxPanY, min(maxPanY, panOffset.height))
+    }
+
+    private func setupScrollMonitors() {
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            if event.modifierFlags.contains(.command) {
+                let factor = 1.0 + event.scrollingDeltaY * 0.01
+                zoomLevel = max(1.0, min(10, zoomLevel * factor))
+                clampPan()
+            } else if zoomLevel > 1.01 {
+                panOffset.width += event.scrollingDeltaX
+                panOffset.height += event.scrollingDeltaY
+                clampPan()
+            }
+            return event
+        }
+        magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { event in
+            let factor = 1.0 + event.magnification
+            zoomLevel = max(1.0, min(10, zoomLevel * factor))
+            clampPan()
+            return event
+        }
+    }
+
+    private func removeScrollMonitors() {
+        if let m = scrollMonitor { NSEvent.removeMonitor(m); scrollMonitor = nil }
+        if let m = magnifyMonitor { NSEvent.removeMonitor(m); magnifyMonitor = nil }
     }
 
     private func undoAction() {
