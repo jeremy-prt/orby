@@ -52,43 +52,51 @@ struct SelectionOverlay: View {
 
 struct TextEditingOverlay: View {
     @Binding var text: String
-    let position: CGPoint
-    let fontSize: CGFloat
-    let color: Color
-    let textHasBackground: Bool
+    let annotation: Annotation
     let onCommit: () -> Void
 
     @FocusState private var isFocused: Bool
 
+    private var liveWidth: CGFloat {
+        guard !text.isEmpty else { return 30 }
+        let font = NSFont.systemFont(ofSize: annotation.fontSize, weight: .medium)
+        return (text as NSString).size(withAttributes: [.font: font]).width + 10
+    }
+
     var body: some View {
-        let textColor: Color = textHasBackground ? contrastTextColor(for: color) : color
+        let textColor: Color = annotation.textHasBackground
+            ? contrastTextColor(for: annotation.color) : annotation.color
+        let editW = max(liveWidth, 40)
+        let editH = annotation.fontSize * 1.3 + 8
 
         ZStack(alignment: .topLeading) {
             Color.clear
-            TextField("", text: $text)
-                .textFieldStyle(.plain)
-                .font(.system(size: fontSize, weight: .medium))
-                .foregroundStyle(textColor)
-                .focused($isFocused)
-                .frame(minWidth: 100, maxWidth: 400)
-                .fixedSize()
-                .padding(.horizontal, 5)
-                .padding(.vertical, 4)
-                .background(
-                    ZStack {
-                        if textHasBackground {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(color)
-                        }
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(brandPurple.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                    }
-                )
-                .position(x: position.x + 55, y: position.y + fontSize * 0.65 + 4)
-                .onSubmit { onCommit() }
-                .onAppear { isFocused = true }
+            ZStack(alignment: .leading) {
+                if annotation.textHasBackground {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(annotation.color)
+                }
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(brandPurple.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [4, 2]))
+                TextField("", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: annotation.fontSize, weight: .medium))
+                    .foregroundStyle(textColor)
+                    .focused($isFocused)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 4)
+            }
+            .frame(width: editW, height: editH)
+            .position(x: annotation.start.x + editW / 2,
+                      y: annotation.start.y + editH / 2)
         }
         .allowsHitTesting(true)
+        .onSubmit { onCommit() }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isFocused = true
+            }
+        }
     }
 
     private func contrastTextColor(for color: Color) -> Color {

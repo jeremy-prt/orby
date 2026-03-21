@@ -68,7 +68,7 @@ struct Annotation: Identifiable, Equatable {
             return CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
         }
         if shape == .text {
-            let w = max(CGFloat(text.count) * fontSize * 0.55 + 10, 20)
+            let w = textMeasuredWidth + 10
             let h = fontSize * 1.3 + 8
             return CGRect(x: start.x, y: start.y, width: w, height: h)
         }
@@ -80,6 +80,13 @@ struct Annotation: Identifiable, Equatable {
             x: min(start.x, end.x), y: min(start.y, end.y),
             width: abs(end.x - start.x), height: abs(end.y - start.y)
         )
+    }
+
+    var textMeasuredWidth: CGFloat {
+        guard !text.isEmpty else { return 20 }
+        let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
+        let size = (text as NSString).size(withAttributes: [.font: font])
+        return max(size.width, 20)
     }
 
     // MARK: - Hit testing
@@ -158,6 +165,14 @@ struct Annotation: Identifiable, Equatable {
     // MARK: - Resize
 
     mutating func resize(handle: ResizeHandle, to point: CGPoint) {
+        if shape == .text {
+            resizeText(handle: handle, to: point)
+            return
+        }
+        if shape == .freehand {
+            resizeFreehand(handle: handle, to: point)
+            return
+        }
         switch handle {
         case .topLeft:
             start = CGPoint(x: min(point.x, end.x), y: min(point.y, end.y))
@@ -176,6 +191,70 @@ struct Annotation: Identifiable, Equatable {
         case .midPoint:
             controlPoint = point
         }
+    }
+
+    private mutating func resizeText(handle: ResizeHandle, to point: CGPoint) {
+        let oldRect = boundingRect
+        guard oldRect.height > 0 else { return }
+        switch handle {
+        case .topLeft:
+            let newH = oldRect.maxY - point.y
+            if newH > 10 {
+                fontSize = max(8, (newH - 8) / 1.3)
+                start = CGPoint(x: point.x, y: point.y)
+            }
+        case .topRight:
+            let newH = oldRect.maxY - point.y
+            if newH > 10 { fontSize = max(8, (newH - 8) / 1.3) }
+            start = CGPoint(x: start.x, y: point.y)
+        case .bottomLeft:
+            let newH = point.y - start.y
+            if newH > 10 {
+                fontSize = max(8, (newH - 8) / 1.3)
+                start = CGPoint(x: point.x, y: start.y)
+            }
+        case .bottomRight:
+            let newH = point.y - start.y
+            if newH > 10 { fontSize = max(8, (newH - 8) / 1.3) }
+        default: break
+        }
+    }
+
+    private mutating func resizeFreehand(handle: ResizeHandle, to point: CGPoint) {
+        guard !points.isEmpty else { return }
+        let oldRect = boundingRect
+        guard oldRect.width > 1 && oldRect.height > 1 else { return }
+
+        // Compute new bounding rect based on which handle is dragged
+        var newRect = oldRect
+        switch handle {
+        case .topLeft:
+            newRect = CGRect(x: point.x, y: point.y,
+                             width: oldRect.maxX - point.x, height: oldRect.maxY - point.y)
+        case .topRight:
+            newRect = CGRect(x: oldRect.minX, y: point.y,
+                             width: point.x - oldRect.minX, height: oldRect.maxY - point.y)
+        case .bottomLeft:
+            newRect = CGRect(x: point.x, y: oldRect.minY,
+                             width: oldRect.maxX - point.x, height: point.y - oldRect.minY)
+        case .bottomRight:
+            newRect = CGRect(x: oldRect.minX, y: oldRect.minY,
+                             width: point.x - oldRect.minX, height: point.y - oldRect.minY)
+        default: break
+        }
+        guard newRect.width > 5 && newRect.height > 5 else { return }
+
+        // Scale all points from oldRect to newRect
+        let sx = newRect.width / oldRect.width
+        let sy = newRect.height / oldRect.height
+        for i in points.indices {
+            points[i] = CGPoint(
+                x: newRect.minX + (points[i].x - oldRect.minX) * sx,
+                y: newRect.minY + (points[i].y - oldRect.minY) * sy
+            )
+        }
+        start = CGPoint(x: newRect.minX, y: newRect.minY)
+        end = CGPoint(x: newRect.maxX, y: newRect.maxY)
     }
 
     // MARK: - Move

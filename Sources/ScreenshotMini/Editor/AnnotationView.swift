@@ -37,11 +37,10 @@ struct AnnotationView: View {
             let rect = annotation.boundingRect
             let textColor: Color = annotation.textHasBackground ? textColorForBackground(annotation.color) : annotation.color
 
-            ZStack(alignment: .topLeading) {
+            ZStack(alignment: .leading) {
                 if annotation.textHasBackground {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(annotation.color)
-                        .frame(width: rect.width, height: rect.height)
                 }
                 Text(annotation.text)
                     .font(.system(size: annotation.fontSize, weight: .medium))
@@ -49,7 +48,9 @@ struct AnnotationView: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 4)
             }
-            .position(x: rect.midX, y: rect.midY)
+            .fixedSize()
+            .position(x: annotation.start.x + rect.width / 2,
+                      y: annotation.start.y + rect.height / 2)
             .allowsHitTesting(false)
         }
     }

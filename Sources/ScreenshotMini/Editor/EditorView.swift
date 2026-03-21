@@ -28,7 +28,11 @@ struct EditorView: View {
     @State private var editingText: String = ""
 
     // Annotation defaults
-    @State private var annotationColor: Color = .red
+    @State private var annotationColor: Color = {
+        if let hex = UserDefaults.standard.string(forKey: "lastAnnotationColor"),
+           let c = Color.fromHex(hex) { return c }
+        return .red
+    }()
     @State private var annotationLineWidth: CGFloat = 3
     @State private var annotationFilled: Bool = false
     @State private var annotationSolidFill: Bool = false
@@ -178,9 +182,11 @@ struct EditorView: View {
                     Image(nsImage: currentImage).resizable().aspectRatio(contentMode: .fit)
                         .frame(width: dw, height: dh)
 
-                    // Annotations
+                    // Annotations (hide text being edited to avoid duplication)
                     ForEach(history.annotations) { ann in
-                        AnnotationView(annotation: ann)
+                        if ann.id != editingTextId {
+                            AnnotationView(annotation: ann)
+                        }
                     }.frame(width: dw, height: dh)
 
                     // Hover highlight
@@ -203,10 +209,7 @@ struct EditorView: View {
                        let ann = history.annotations.first(where: { $0.id == editId }) {
                         TextEditingOverlay(
                             text: $editingText,
-                            position: ann.start,
-                            fontSize: ann.fontSize,
-                            color: ann.color,
-                            textHasBackground: ann.textHasBackground,
+                            annotation: ann,
                             onCommit: { commitTextEdit() }
                         )
                         .frame(width: dw, height: dh)
@@ -389,9 +392,21 @@ struct EditorView: View {
     private func handleTap(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {
         let pt = canvasPoint(location, dw: dw, dh: dh, ox: ox, oy: oy)
 
-        // Text tool: click to place text
-        if selectedTool == "text" {
+        // Text tool: if already editing, commit and switch to select
+        if selectedTool == "text" && editingTextId != nil {
             commitTextIfNeeded()
+            selectedTool = "cursor"
+            // Check if we clicked on an annotation
+            if let hit = history.annotations.last(where: { $0.hitTest(pt) }) {
+                selectedId = hit.id
+            } else {
+                selectedId = nil
+            }
+            return
+        }
+
+        // Text tool: click to place new text
+        if selectedTool == "text" {
             let ann = Annotation(shape: .text, start: pt, end: pt,
                                  color: annotationColor, fontSize: fontSize,
                                  textHasBackground: textHasBackground)
@@ -557,6 +572,7 @@ struct EditorView: View {
 
     private func setAnnotationColor(_ color: Color) {
         annotationColor = color
+        UserDefaults.standard.set(color.toHex(), forKey: "lastAnnotationColor")
         guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].color = color
