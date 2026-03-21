@@ -91,6 +91,14 @@ struct AnnotationView: View {
             angle = atan2(e.y - s.y, e.x - s.x)
         }
 
+        // Start angle (for double arrow)
+        let startAngle: CGFloat
+        if let cp = cp {
+            startAngle = atan2(s.y - cp.y, s.x - cp.x)
+        } else {
+            startAngle = atan2(s.y - e.y, s.x - e.x)
+        }
+
         switch annotation.arrowStyle {
         case .thin:
             drawThinArrow(ctx: ctx, from: s, to: e, cp: cp, angle: angle, hasCurve: hasCurve)
@@ -98,6 +106,8 @@ struct AnnotationView: View {
             drawOutlineArrow(ctx: ctx, from: s, to: e, cp: cp, angle: angle, hasCurve: hasCurve)
         case .filled:
             drawFilledArrow(ctx: ctx, from: s, to: e, cp: cp, angle: angle, hasCurve: hasCurve)
+        case .double:
+            drawDoubleArrow(ctx: ctx, from: s, to: e, cp: cp, endAngle: angle, startAngle: startAngle, hasCurve: hasCurve)
         }
     }
 
@@ -234,6 +244,37 @@ struct AnnotationView: View {
 
             ctx.fill(path, with: .color(annotation.color))
         }
+    }
+
+    /// Double arrow: arrowheads on both ends
+    private func drawDoubleArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, endAngle: CGFloat, startAngle: CGFloat, hasCurve: Bool) {
+        // Shaft
+        var shaft = Path()
+        shaft.move(to: s)
+        if let cp = cp {
+            shaft.addQuadCurve(to: e, control: cp)
+        } else {
+            shaft.addLine(to: e)
+        }
+        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+
+        let hl: CGFloat = 15, ha: CGFloat = .pi / 6
+
+        // Arrowhead at end
+        var headEnd = Path()
+        headEnd.move(to: e)
+        headEnd.addLine(to: CGPoint(x: e.x - hl * cos(endAngle - ha), y: e.y - hl * sin(endAngle - ha)))
+        headEnd.move(to: e)
+        headEnd.addLine(to: CGPoint(x: e.x - hl * cos(endAngle + ha), y: e.y - hl * sin(endAngle + ha)))
+        ctx.stroke(headEnd, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+
+        // Arrowhead at start
+        var headStart = Path()
+        headStart.move(to: s)
+        headStart.addLine(to: CGPoint(x: s.x - hl * cos(startAngle - ha), y: s.y - hl * sin(startAngle - ha)))
+        headStart.move(to: s)
+        headStart.addLine(to: CGPoint(x: s.x - hl * cos(startAngle + ha), y: s.y - hl * sin(startAngle + ha)))
+        ctx.stroke(headStart, with: .color(annotation.color), lineWidth: annotation.lineWidth)
     }
 
     // MARK: - Bézier helpers

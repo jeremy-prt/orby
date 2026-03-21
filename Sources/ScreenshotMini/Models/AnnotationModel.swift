@@ -12,6 +12,7 @@ enum ArrowStyle: Equatable, Sendable {
     case outline    // hollow arrowhead
     case thin       // simple line + arrowhead (current behavior)
     case filled     // thick filled arrow (big visible arrow like Shottr)
+    case double     // arrowheads on both ends (↔)
 }
 
 // MARK: - Resize handle

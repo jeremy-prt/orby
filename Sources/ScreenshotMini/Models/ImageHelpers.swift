@@ -172,6 +172,33 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
                     fp.close()
                     nsColor.setFill(); fp.fill()
                 }
+
+            case .double:
+                path.lineWidth = lw
+                path.move(to: s)
+                if let cp = cp { path.curve(to: e, controlPoint1: cp, controlPoint2: cp) } else { path.line(to: e) }
+                path.stroke()
+                let hl: CGFloat = 15 * sx, ha: CGFloat = .pi / 6
+                // End arrowhead
+                let ap1 = NSBezierPath(); ap1.lineWidth = lw
+                ap1.move(to: e)
+                ap1.line(to: NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha)))
+                ap1.move(to: e)
+                ap1.line(to: NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha)))
+                ap1.stroke()
+                // Start arrowhead
+                let startAngle: CGFloat
+                if let cp = cp {
+                    startAngle = atan2(s.y - cp.y, s.x - cp.x)
+                } else {
+                    startAngle = atan2(s.y - e.y, s.x - e.x)
+                }
+                let ap2 = NSBezierPath(); ap2.lineWidth = lw
+                ap2.move(to: s)
+                ap2.line(to: NSPoint(x: s.x - hl * cos(startAngle - ha), y: s.y - hl * sin(startAngle - ha)))
+                ap2.move(to: s)
+                ap2.line(to: NSPoint(x: s.x - hl * cos(startAngle + ha), y: s.y - hl * sin(startAngle + ha)))
+                ap2.stroke()
             }
         case .text:
             if !ann.text.isEmpty {

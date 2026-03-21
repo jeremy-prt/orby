@@ -87,6 +87,8 @@ struct AnnotationToolbar: View {
                                      active: annotation.arrowStyle == .thin, weight: .regular)
                     arrowStyleButton(icon: "arrowshape.right.fill", style: .filled,
                                      active: annotation.arrowStyle == .filled, weight: .regular)
+                    arrowStyleButton(icon: "arrow.left.and.right", style: .double,
+                                     active: annotation.arrowStyle == .double, weight: .regular)
                 }
             }
         }

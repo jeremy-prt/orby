@@ -9,7 +9,7 @@ struct EditorView: View {
     let onClose: () -> Void
 
     @State private var currentImage: NSImage
-    @State private var selectedTool: String? = nil
+    @State private var selectedTool: String? = "cursor"
     @StateObject private var history = AnnotationHistory()
 
     // Selection & hover
@@ -68,7 +68,6 @@ struct EditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
             canvas
         }
         .ignoresSafeArea()
@@ -163,7 +162,8 @@ struct EditorView: View {
                     .background(RoundedRectangle(cornerRadius: 6).fill(brandPurple))
             }.buttonStyle(.plain)
         }
-        .padding(.horizontal, 8).padding(.vertical, 4).frame(height: 38).background(.bar)
+        .padding(.horizontal, 8)
+        .frame(height: 38)
     }
 
     // MARK: - Canvas

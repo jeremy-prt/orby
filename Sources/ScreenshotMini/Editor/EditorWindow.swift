@@ -29,6 +29,12 @@ class EditorWindow {
         win.titlebarAppearsTransparent = true
         win.titleVisibility = .hidden
         win.styleMask.insert(.fullSizeContentView)
+        // Add empty toolbar to push traffic lights down to align with our SwiftUI toolbar
+        let tb = NSToolbar(identifier: "editorToolbar")
+        tb.showsBaselineSeparator = false
+        win.toolbar = tb
+        win.toolbarStyle = .unifiedCompact
+        win.appearance = NSAppearance(named: .darkAqua)
         win.minSize = NSSize(width: 400, height: 300)
         win.contentView = hostingView
         win.center()
