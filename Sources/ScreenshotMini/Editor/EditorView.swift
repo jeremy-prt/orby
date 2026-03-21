@@ -5,43 +5,45 @@ import AppKit
 
 @MainActor private let rotateCursor: NSCursor = {
     let size: CGFloat = 22
-    let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+    let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
         guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
         let center = CGPoint(x: size / 2, y: size / 2)
         let radius: CGFloat = 7
 
-        // White outline
+        // White arc (270°, from bottom going clockwise to the left)
         ctx.setStrokeColor(NSColor.white.cgColor)
-        ctx.setLineWidth(3.5)
+        ctx.setLineWidth(2)
         ctx.setLineCap(.round)
-        ctx.addArc(center: center, radius: radius, startAngle: .pi * 0.3, endAngle: .pi * 1.7, clockwise: false)
+        let startAngle: CGFloat = .pi * -0.25   // ~315° — start near top-right
+        let endAngle: CGFloat  = .pi *  1.25    // ~225° — end near bottom-left
+        ctx.addArc(center: center, radius: radius,
+                   startAngle: startAngle, endAngle: endAngle, clockwise: false)
         ctx.strokePath()
 
-        // Black arc
-        ctx.setStrokeColor(NSColor.black.cgColor)
-        ctx.setLineWidth(1.8)
-        ctx.addArc(center: center, radius: radius, startAngle: .pi * 0.3, endAngle: .pi * 1.7, clockwise: false)
-        ctx.strokePath()
+        // Arrowhead at the end of the arc (tangent pointing "forward")
+        // At endAngle the tangent direction (counter-clockwise) is perpendicular: endAngle + π/2
+        let tipX = center.x + radius * cos(endAngle)
+        let tipY = center.y + radius * sin(endAngle)
+        let tip = CGPoint(x: tipX, y: tipY)
 
-        // Arrowhead at end
-        let tipAngle: CGFloat = .pi * 1.7
-        let tip = CGPoint(x: center.x + radius * cos(tipAngle), y: center.y + radius * sin(tipAngle))
-        // White outline
-        ctx.setStrokeColor(NSColor.white.cgColor)
-        ctx.setLineWidth(3.5)
+        // Tangent direction at end of CCW arc = endAngle + π/2
+        let tangent = endAngle + .pi / 2
+        let arrowLen: CGFloat = 5
+        let spread: CGFloat = .pi * 0.35   // half-angle of arrowhead
+
+        ctx.setFillColor(NSColor.white.cgColor)
+        ctx.beginPath()
         ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(x: tip.x + 4, y: tip.y + 1))
-        ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(x: tip.x - 1, y: tip.y + 5))
-        ctx.strokePath()
-        // Black arrow
-        ctx.setStrokeColor(NSColor.black.cgColor)
-        ctx.setLineWidth(1.8)
-        ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(x: tip.x + 4, y: tip.y + 1))
-        ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(x: tip.x - 1, y: tip.y + 5))
-        ctx.strokePath()
+        ctx.addLine(to: CGPoint(
+            x: tip.x - arrowLen * cos(tangent - spread),
+            y: tip.y - arrowLen * sin(tangent - spread)
+        ))
+        ctx.addLine(to: CGPoint(
+            x: tip.x - arrowLen * cos(tangent + spread),
+            y: tip.y - arrowLen * sin(tangent + spread)
+        ))
+        ctx.closePath()
+        ctx.fillPath()
 
         return true
     }
@@ -320,7 +322,6 @@ struct EditorView: View {
                         .onChanged { v in handleDrag(v, dw: dw, dh: dh, ox: ox, oy: oy) }
                         .onEnded { v in handleDragEnd(v, dw: dw, dh: dh, ox: ox, oy: oy) }
                 )
-                .onTapGesture(count: 2) { loc in handleDoubleTap(loc, dw: dw, dh: dh, ox: ox, oy: oy) }
                 .onTapGesture { loc in handleTap(loc, dw: dw, dh: dh, ox: ox, oy: oy) }
                 .onContinuousHover { phase in
                     switch phase {
@@ -502,10 +503,6 @@ struct EditorView: View {
             break
         }
         interaction = .none
-    }
-
-    private func handleDoubleTap(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {
-        // Not used currently — edit is triggered by clicking an already-selected text
     }
 
     private func handleTap(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {

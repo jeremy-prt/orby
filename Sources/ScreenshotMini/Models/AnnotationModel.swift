@@ -85,7 +85,7 @@ struct Annotation: Identifiable, Equatable {
         }
         if shape == .text {
             let w = textMeasuredWidth + 10
-            let h = fontSize * 1.3 + 8
+            let h = (fontSize * 1.3) * CGFloat(textLineCount) + 8
             return CGRect(x: start.x, y: start.y, width: w, height: h)
         }
         if shape == .arrow, let cp = controlPoint {
@@ -101,8 +101,13 @@ struct Annotation: Identifiable, Equatable {
     var textMeasuredWidth: CGFloat {
         guard !text.isEmpty else { return 20 }
         let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
-        let size = (text as NSString).size(withAttributes: [.font: font])
-        return max(size.width, 20)
+        let lines = text.components(separatedBy: "\n")
+        let maxWidth = lines.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        return max(maxWidth, 20)
+    }
+
+    private var textLineCount: Int {
+        max(1, text.components(separatedBy: "\n").count)
     }
 
     // MARK: - Rotation helper
