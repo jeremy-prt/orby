@@ -72,6 +72,10 @@ struct EditorView: View {
     @State private var cropEnd: CGPoint? = nil
     @State private var canvasSize: CGSize = .zero
 
+    // Zoom & pan
+    @State private var zoomLevel: CGFloat = 1.0
+    @State private var panOffset: CGSize = .zero
+
     // Text editing
     @State private var editingTextId: UUID? = nil
     @State private var editingText: String = ""
@@ -161,6 +165,11 @@ struct EditorView: View {
                 Button("") { selectTool("draw") }.keyboardShortcut("d", modifiers: []).hidden()
                 Button("") { selectTool("blur") }.keyboardShortcut("b", modifiers: []).hidden()
                 Button("") { selectTool(nil) }.keyboardShortcut(.escape, modifiers: []).hidden()
+                // Zoom
+                Button("") { zoomIn() }.keyboardShortcut("+", modifiers: .command).hidden()
+                Button("") { zoomIn() }.keyboardShortcut("=", modifiers: .command).hidden()
+                Button("") { zoomOut() }.keyboardShortcut("-", modifiers: .command).hidden()
+                Button("") { zoomReset() }.keyboardShortcut("0", modifiers: .command).hidden()
                 // Copy/Paste annotations
                 Button("") { copySelectedAnnotation() }.keyboardShortcut("c", modifiers: .command).hidden()
                 Button("") { pasteAnnotation() }.keyboardShortcut("v", modifiers: .command).hidden()
@@ -242,9 +251,11 @@ struct EditorView: View {
 
             GeometryReader { geo in
                 let imgSize = currentImage.size
-                let scale = min(geo.size.width / max(imgSize.width, 1), geo.size.height / max(imgSize.height, 1))
+                let fitScale = min(geo.size.width / max(imgSize.width, 1), geo.size.height / max(imgSize.height, 1))
+                let scale = fitScale * zoomLevel
                 let dw = imgSize.width * scale, dh = imgSize.height * scale
-                let ox = (geo.size.width - dw) / 2, oy = (geo.size.height - dh) / 2
+                let ox = (geo.size.width - dw) / 2 + panOffset.width
+                let oy = (geo.size.height - dh) / 2 + panOffset.height
 
                 ZStack(alignment: .topLeading) {
                     Image(nsImage: currentImage).resizable().aspectRatio(contentMode: .fit)
@@ -335,6 +346,23 @@ struct EditorView: View {
                     }
                 }
                 .onAppear { canvasSize = CGSize(width: dw, height: dh) }
+                .gesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            let newZoom = max(0.25, min(10, zoomLevel * value.magnification))
+                            zoomLevel = newZoom
+                        }
+                )
+            }
+
+            // Zoom indicator (bottom-right)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    ZoomIndicator(zoom: zoomLevel, onZoomIn: zoomIn, onZoomOut: zoomOut, onReset: zoomReset)
+                        .padding(10)
+                }
             }
 
             // Crop toolbar (top-right)
@@ -584,6 +612,21 @@ struct EditorView: View {
     private func cancelTool() {
         commitTextIfNeeded()
         selectedTool = nil; cropStart = nil; cropEnd = nil; interaction = .none
+    }
+
+    private func zoomIn() {
+        withAnimation(.easeOut(duration: 0.15)) { zoomLevel = min(10, zoomLevel * 1.25) }
+    }
+
+    private func zoomOut() {
+        withAnimation(.easeOut(duration: 0.15)) {
+            zoomLevel = max(0.25, zoomLevel / 1.25)
+            if zoomLevel <= 1.05 { panOffset = .zero }
+        }
+    }
+
+    private func zoomReset() {
+        withAnimation(.easeOut(duration: 0.2)) { zoomLevel = 1.0; panOffset = .zero }
     }
 
     private func undoAction() {

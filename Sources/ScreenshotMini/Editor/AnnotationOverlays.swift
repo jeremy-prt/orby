@@ -247,6 +247,43 @@ struct CropToolbar: View {
 
 // MARK: - Crop Mask
 
+// MARK: - Zoom Indicator
+
+struct ZoomIndicator: View {
+    let zoom: CGFloat
+    let onZoomIn: () -> Void
+    let onZoomOut: () -> Void
+    let onReset: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button { onZoomOut() } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 11, weight: .medium))
+                    .frame(width: 22, height: 22)
+            }.buttonStyle(.plain)
+
+            Button { onReset() } label: {
+                Text("\(Int(zoom * 100))%")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .frame(minWidth: 40)
+            }.buttonStyle(.plain)
+
+            Button { onZoomIn() } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .medium))
+                    .frame(width: 22, height: 22)
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.9))
+                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        )
+    }
+}
+
 struct CropMask: Shape {
     let rect: CGRect; let size: CGSize
     func path(in frame: CGRect) -> Path {
