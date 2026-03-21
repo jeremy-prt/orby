@@ -46,6 +46,11 @@ enum L10n {
     static var resetToDesktop: String { lang == "en" ? "Reset to Desktop" : "Remettre Bureau par défaut" }
     static var chooseFolder: String { lang == "en" ? "Choose save folder" : "Choisir le dossier de sauvegarde des captures" }
 
+    // MARK: - Editor toolbar
+    static var editorCopy: String { lang == "en" ? "Copy" : "Copier" }
+    static var editorSave: String { lang == "en" ? "Save" : "Sauvegarder" }
+    static var editorApply: String { lang == "en" ? "Apply" : "Appliquer" }
+
     static var pressKey: String { lang == "en" ? "Press..." : "Appuyez..." }
     static var setKey: String { lang == "en" ? "Set" : "Définir" }
     static var installInApps: String { lang == "en" ? "Install the app in /Applications to enable this option" : "Installez l'app dans /Applications pour activer cette option" }

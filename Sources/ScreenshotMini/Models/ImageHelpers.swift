@@ -6,12 +6,16 @@ import CoreImage.CIFilterBuiltins
 // MARK: - Crop helper
 
 func cropImage(_ image: NSImage, to rect: CGRect, canvasSize: CGSize) -> NSImage {
-    let scaleX = image.size.width / canvasSize.width
-    let scaleY = image.size.height / canvasSize.height
+    guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+    // Use pixel dimensions (CGImage), not point dimensions (NSImage.size) — Retina images are 2x
+    let pixelW = CGFloat(cg.width)
+    let pixelH = CGFloat(cg.height)
+    let scaleX = pixelW / canvasSize.width
+    let scaleY = pixelH / canvasSize.height
+    // CGImage origin is top-left (same as canvas Y-down), no flip needed
     let cropRect = CGRect(x: rect.origin.x * scaleX, y: rect.origin.y * scaleY,
                           width: rect.width * scaleX, height: rect.height * scaleY)
-    guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-          let cropped = cg.cropping(to: cropRect) else { return image }
+    guard let cropped = cg.cropping(to: cropRect) else { return image }
     return NSImage(cgImage: cropped, size: NSSize(width: cropped.width, height: cropped.height))
 }
 
@@ -207,12 +211,20 @@ private func flattenText(ann: Annotation, sx: CGFloat, sy: CGFloat, canvasSize: 
     guard !ann.text.isEmpty else { return }
     let fSize = ann.fontSize * sx
     let font = NSFont.systemFont(ofSize: fSize, weight: .medium)
+    let padH: CGFloat = 5 * sx
+    let padV: CGFloat = 4 * sy
     let tx = ann.start.x * sx
+    // start.y is top-left in canvas (Y-down), convert to AppKit (Y-up)
     let ty = (canvasSize.height - ann.start.y) * sy
 
+    // Measure text properly for multiline
+    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+    let str = NSAttributedString(string: ann.text, attributes: attrs)
+    let textSize = str.size()
+    let textW = textSize.width + padH * 2
+    let textH = textSize.height + padV * 2
+
     if ann.textHasBackground {
-        let textW = max(CGFloat(ann.text.count) * fSize * 0.55 + 10 * sx, 20 * sx)
-        let textH = fSize * 1.3 + 8 * sy
         let bgRect = NSRect(x: tx, y: ty - textH, width: textW, height: textH)
         let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 4 * sx, yRadius: 4 * sy)
         nsColor.setFill()
@@ -223,13 +235,15 @@ private func flattenText(ann: Annotation, sx: CGFloat, sy: CGFloat, canvasSize: 
         let luminance = 0.299 * r + 0.587 * g + 0.114 * b
         let textNSColor: NSColor = luminance > 0.6 ? .black : .white
 
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textNSColor]
-        let str = NSAttributedString(string: ann.text, attributes: attrs)
-        str.draw(at: NSPoint(x: tx + 5 * sx, y: ty - textH + 4 * sy))
+        let textAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textNSColor]
+        let textStr = NSAttributedString(string: ann.text, attributes: textAttrs)
+        let textRect = NSRect(x: tx + padH, y: ty - textH + padV, width: textSize.width, height: textSize.height)
+        textStr.draw(in: textRect)
     } else {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: nsColor]
-        let str = NSAttributedString(string: ann.text, attributes: attrs)
-        str.draw(at: NSPoint(x: tx + 5 * sx, y: ty - fSize * 1.3 - 4 * sy))
+        let textAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: nsColor]
+        let textStr = NSAttributedString(string: ann.text, attributes: textAttrs)
+        let textRect = NSRect(x: tx + padH, y: ty - textH + padV, width: textSize.width, height: textSize.height)
+        textStr.draw(in: textRect)
     }
 }
 

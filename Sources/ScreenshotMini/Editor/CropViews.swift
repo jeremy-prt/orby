@@ -19,7 +19,7 @@ struct CropToolbar: View {
             Button { onApply() } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark").font(.system(size: 12, weight: .bold))
-                    Text("Apply").font(.system(size: 12, weight: .semibold))
+                    Text(L10n.editorApply).font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12).padding(.vertical, 6)

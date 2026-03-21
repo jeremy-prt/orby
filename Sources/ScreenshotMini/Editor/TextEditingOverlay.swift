@@ -16,9 +16,9 @@ struct MultilineTextField: NSViewRepresentable {
         field.isEditable = true
         field.isSelectable = true
         field.focusRingType = .none
-        field.lineBreakMode = .byWordWrapping
+        field.lineBreakMode = .byClipping
         field.maximumNumberOfLines = 0
-        field.cell?.wraps = true
+        field.cell?.wraps = false
         field.cell?.isScrollable = false
         field.font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
         field.textColor = textColor

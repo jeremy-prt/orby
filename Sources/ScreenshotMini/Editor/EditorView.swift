@@ -255,7 +255,7 @@ struct EditorView: View {
                 onClose()
             } label: {
                 Image(systemName: "doc.on.doc").font(.system(size: 13)).frame(width: 28, height: 28)
-            }.buttonStyle(.plain).help("Copy")
+            }.buttonStyle(.plain).help(L10n.editorCopy)
 
             // Save
             Button {
@@ -263,7 +263,7 @@ struct EditorView: View {
                 saveImage(img, to: savePath)
                 onClose()
             } label: {
-                Text("Save").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                Text(L10n.editorSave).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 5)
                     .background(RoundedRectangle(cornerRadius: 6).fill(brandPurple))
             }.buttonStyle(.plain)
