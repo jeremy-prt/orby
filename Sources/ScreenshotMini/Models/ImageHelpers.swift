@@ -3,77 +3,6 @@ import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-// MARK: - Save helper
-
-/// Downscale Retina image to 1x: pixel count matches point dimensions
-func normalizeImageDPI(_ image: NSImage) -> NSImage {
-    let pointSize = image.size
-    let targetW = Int(pointSize.width)
-    let targetH = Int(pointSize.height)
-    guard targetW > 0, targetH > 0 else { return image }
-
-    // Create a bitmap at exactly 1x pixel resolution
-    guard let bitmapRep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: targetW,
-        pixelsHigh: targetH,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: 0,
-        bitsPerPixel: 0
-    ) else { return image }
-
-    bitmapRep.size = pointSize
-
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
-    image.draw(in: NSRect(origin: .zero, size: pointSize),
-               from: NSRect(origin: .zero, size: pointSize),
-               operation: .copy, fraction: 1.0)
-    NSGraphicsContext.restoreGraphicsState()
-
-    let result = NSImage(size: pointSize)
-    result.addRepresentation(bitmapRep)
-    return result
-}
-
-@MainActor
-func saveImage(_ image: NSImage, to savePath: URL) {
-    let exportImage = UserDefaults.standard.bool(forKey: "exportRetina") ? image : normalizeImageDPI(image)
-    guard let tiff = exportImage.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiff) else { return }
-    let format = UserDefaults.standard.string(forKey: "imageFormat") ?? "png"
-    let (fileType, ext): (NSBitmapImageRep.FileType, String) = switch format {
-        case "jpeg": (.jpeg, "jpg")
-        case "tiff": (.tiff, "tiff")
-        default: (.png, "png")
-    }
-    let props: [NSBitmapImageRep.PropertyKey: Any] = fileType == .jpeg ? [.compressionFactor: 0.9] : [:]
-    guard let data = bitmap.representation(using: fileType, properties: props) else { return }
-    let filename = "Screenshot_\(DateFormatter.yyyyMMdd_HHmmss.string(from: Date())).\(ext)"
-    let fullPath = savePath.appending(path: filename)
-    try? data.write(to: fullPath)
-    let en = L10n.lang == "en"
-    ToastManager.shared.show(
-        title: en ? "Saved!" : "Sauvegardé !",
-        subtitle: en ? "Saved to \(fullPath.lastPathComponent)" : "Sauvegardé dans \(fullPath.lastPathComponent)"
-    )
-}
-
-/// Generate a unique filename for temporary drag files
-func uniqueDragFilename() -> String {
-    "Screenshot_\(DateFormatter.yyyyMMdd_HHmmss.string(from: Date()))_\(UUID().uuidString.prefix(6)).png"
-}
-
-extension DateFormatter {
-    static let yyyyMMdd_HHmmss: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd_HH-mm-ss"; return f
-    }()
-}
-
 // MARK: - Crop helper
 
 func cropImage(_ image: NSImage, to rect: CGRect, canvasSize: CGSize) -> NSImage {
@@ -110,12 +39,10 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
         if hasRotation {
             NSGraphicsContext.saveGraphicsState()
             let canvasRect = ann.boundingRect
-            // Center in image coordinates (Y-flipped)
             let cx = canvasRect.midX * sx
             let cy = (canvasSize.height - canvasRect.midY) * sy
             let transform = NSAffineTransform()
             transform.translateX(by: cx, yBy: cy)
-            // Negative because canvas Y is flipped relative to image Y
             transform.rotate(byDegrees: CGFloat(-ann.rotation))
             transform.translateX(by: -cx, yBy: -cy)
             transform.concat()
@@ -135,267 +62,16 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
         case .line:
             path.move(to: s); path.line(to: e); path.stroke()
         case .arrow:
-            let cp: NSPoint? = ann.controlPoint.map { NSPoint(x: $0.x * sx, y: (canvasSize.height - $0.y) * sy) }
-            let angle: CGFloat
-            if let cp = cp {
-                angle = atan2(e.y - cp.y, e.x - cp.x)
-            } else {
-                angle = atan2(e.y - s.y, e.x - s.x)
-            }
-            let lw = ann.lineWidth * sx
-
-            switch ann.arrowStyle {
-            case .thin:
-                path.lineWidth = lw
-                path.move(to: s)
-                if let cp = cp { path.curve(to: e, controlPoint1: cp, controlPoint2: cp) } else { path.line(to: e) }
-                path.stroke()
-                let hl: CGFloat = 15 * sx, ha: CGFloat = .pi / 6
-                let ap = NSBezierPath(); ap.lineWidth = lw
-                ap.move(to: e)
-                ap.line(to: NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha)))
-                ap.move(to: e)
-                ap.line(to: NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha)))
-                ap.stroke()
-
-            case .outline:
-                let hl: CGFloat = 20 * sx, ha: CGFloat = .pi / 6
-                let tip = e
-                let left = NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha))
-                let right = NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha))
-                let baseCenter = NSPoint(x: (left.x + right.x) / 2, y: (left.y + right.y) / 2)
-                // Shaft
-                let sp = NSBezierPath(); sp.lineWidth = lw
-                sp.move(to: s)
-                if let cp = cp { sp.curve(to: baseCenter, controlPoint1: cp, controlPoint2: cp) } else { sp.line(to: baseCenter) }
-                sp.stroke()
-                // Arrowhead triangle (stroked)
-                let hp = NSBezierPath(); hp.lineWidth = lw
-                hp.move(to: tip); hp.line(to: left); hp.line(to: right); hp.close()
-                hp.stroke()
-
-            case .filled:
-                let shaftWidth = lw * 3
-                let headLength = max(shaftWidth * 3, 30 * sx)
-                let headWidth = max(shaftWidth * 2.5, 25 * sx)
-
-                if let cp = cp {
-                    let totalLength = hypot(e.x - s.x, e.y - s.y)
-                    guard totalLength > 1 else { break }
-                    let headRatio = min(headLength / totalLength, 0.5)
-                    let shaftEndT = max(0, 1.0 - headRatio)
-                    let steps = 12
-
-                    func bezPt(_ t: CGFloat) -> NSPoint {
-                        let omt = 1 - t
-                        return NSPoint(x: omt * omt * s.x + 2 * omt * t * cp.x + t * t * e.x,
-                                       y: omt * omt * s.y + 2 * omt * t * cp.y + t * t * e.y)
-                    }
-                    func bezTang(_ t: CGFloat) -> CGFloat {
-                        let dx = 2 * (1 - t) * (cp.x - s.x) + 2 * t * (e.x - cp.x)
-                        let dy = 2 * (1 - t) * (cp.y - s.y) + 2 * t * (e.y - cp.y)
-                        return atan2(dy, dx)
-                    }
-
-                    let shaftEnd = bezPt(shaftEndT)
-                    let perpHead = bezTang(1.0) + .pi / 2
-                    let leftHead = NSPoint(x: shaftEnd.x + headWidth * cos(perpHead), y: shaftEnd.y + headWidth * sin(perpHead))
-                    let rightHead = NSPoint(x: shaftEnd.x - headWidth * cos(perpHead), y: shaftEnd.y - headWidth * sin(perpHead))
-
-                    var leftPts: [NSPoint] = [], rightPts: [NSPoint] = []
-                    for i in 0...steps {
-                        let t = CGFloat(i) / CGFloat(steps) * shaftEndT
-                        let pt = bezPt(t)
-                        let tang = bezTang(t)
-                        let perp = tang + .pi / 2
-                        let hw = shaftWidth / 2
-                        leftPts.append(NSPoint(x: pt.x + hw * cos(perp), y: pt.y + hw * sin(perp)))
-                        rightPts.append(NSPoint(x: pt.x - hw * cos(perp), y: pt.y - hw * sin(perp)))
-                    }
-
-                    let fp = NSBezierPath()
-                    fp.move(to: leftPts[0])
-                    for i in 1..<leftPts.count { fp.line(to: leftPts[i]) }
-                    fp.line(to: leftHead); fp.line(to: e); fp.line(to: rightHead)
-                    for i in stride(from: rightPts.count - 1, through: 0, by: -1) { fp.line(to: rightPts[i]) }
-                    fp.close()
-                    nsColor.setFill(); fp.fill()
-                } else {
-                    let perpAngle = angle + .pi / 2
-                    let halfShaft = shaftWidth / 2
-                    let headBase = NSPoint(x: e.x - headLength * cos(angle), y: e.y - headLength * sin(angle))
-
-                    let fp = NSBezierPath()
-                    fp.move(to: NSPoint(x: s.x + halfShaft * cos(perpAngle), y: s.y + halfShaft * sin(perpAngle)))
-                    fp.line(to: NSPoint(x: headBase.x + halfShaft * cos(perpAngle), y: headBase.y + halfShaft * sin(perpAngle)))
-                    fp.line(to: NSPoint(x: headBase.x + headWidth * cos(perpAngle), y: headBase.y + headWidth * sin(perpAngle)))
-                    fp.line(to: e)
-                    fp.line(to: NSPoint(x: headBase.x - headWidth * cos(perpAngle), y: headBase.y - headWidth * sin(perpAngle)))
-                    fp.line(to: NSPoint(x: headBase.x - halfShaft * cos(perpAngle), y: headBase.y - halfShaft * sin(perpAngle)))
-                    fp.line(to: NSPoint(x: s.x - halfShaft * cos(perpAngle), y: s.y - halfShaft * sin(perpAngle)))
-                    fp.close()
-                    nsColor.setFill(); fp.fill()
-                }
-
-            case .double:
-                path.lineWidth = lw
-                path.move(to: s)
-                if let cp = cp { path.curve(to: e, controlPoint1: cp, controlPoint2: cp) } else { path.line(to: e) }
-                path.stroke()
-                let hl: CGFloat = 15 * sx, ha: CGFloat = .pi / 6
-                // End arrowhead
-                let ap1 = NSBezierPath(); ap1.lineWidth = lw
-                ap1.move(to: e)
-                ap1.line(to: NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha)))
-                ap1.move(to: e)
-                ap1.line(to: NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha)))
-                ap1.stroke()
-                // Start arrowhead
-                let startAngle: CGFloat
-                if let cp = cp {
-                    startAngle = atan2(s.y - cp.y, s.x - cp.x)
-                } else {
-                    startAngle = atan2(s.y - e.y, s.x - e.x)
-                }
-                let ap2 = NSBezierPath(); ap2.lineWidth = lw
-                ap2.move(to: s)
-                ap2.line(to: NSPoint(x: s.x - hl * cos(startAngle - ha), y: s.y - hl * sin(startAngle - ha)))
-                ap2.move(to: s)
-                ap2.line(to: NSPoint(x: s.x - hl * cos(startAngle + ha), y: s.y - hl * sin(startAngle + ha)))
-                ap2.stroke()
-            }
+            flattenArrow(ann: ann, s: s, e: e, sx: sx, sy: sy, canvasSize: canvasSize)
         case .text:
-            if !ann.text.isEmpty {
-                let fSize = ann.fontSize * sx
-                let font = NSFont.systemFont(ofSize: fSize, weight: .medium)
-                let tx = ann.start.x * sx
-                // start.y is top-left in canvas (Y-down), convert to AppKit (Y-up)
-                let ty = (canvasSize.height - ann.start.y) * sy
-
-                if ann.textHasBackground {
-                    // Draw background rounded rect
-                    let textW = max(CGFloat(ann.text.count) * fSize * 0.55 + 10 * sx, 20 * sx)
-                    let textH = fSize * 1.3 + 8 * sy
-                    let bgRect = NSRect(x: tx, y: ty - textH, width: textW, height: textH)
-                    let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 4 * sx, yRadius: 4 * sy)
-                    nsColor.setFill()
-                    bgPath.fill()
-
-                    // Determine contrast text color
-                    let rgbColor = nsColor.usingColorSpace(.deviceRGB) ?? nsColor
-                    let r = rgbColor.redComponent, g = rgbColor.greenComponent, b = rgbColor.blueComponent
-                    let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-                    let textNSColor: NSColor = luminance > 0.6 ? .black : .white
-
-                    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textNSColor]
-                    let str = NSAttributedString(string: ann.text, attributes: attrs)
-                    str.draw(at: NSPoint(x: tx + 5 * sx, y: ty - textH + 4 * sy))
-                } else {
-                    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: nsColor]
-                    let str = NSAttributedString(string: ann.text, attributes: attrs)
-                    str.draw(at: NSPoint(x: tx + 5 * sx, y: ty - fSize * 1.3 - 4 * sy))
-                }
-            }
+            flattenText(ann: ann, sx: sx, sy: sy, canvasSize: canvasSize, nsColor: nsColor)
         case .freehand:
-            guard ann.points.count >= 2 else { break }
-            let fp = NSBezierPath(); fp.lineWidth = ann.lineWidth * sx
-            let first = NSPoint(x: ann.points[0].x * sx, y: (canvasSize.height - ann.points[0].y) * sy)
-            fp.move(to: first)
-            for i in 1..<ann.points.count {
-                let pt = NSPoint(x: ann.points[i].x * sx, y: (canvasSize.height - ann.points[i].y) * sy)
-                let prev = NSPoint(x: ann.points[i-1].x * sx, y: (canvasSize.height - ann.points[i-1].y) * sy)
-                let mid = NSPoint(x: (prev.x + pt.x) / 2, y: (prev.y + pt.y) / 2)
-                fp.curve(to: mid, controlPoint1: prev, controlPoint2: prev)
-            }
-            let last = NSPoint(x: ann.points.last!.x * sx, y: (canvasSize.height - ann.points.last!.y) * sy)
-            fp.line(to: last)
-            nsColor.setStroke()
-            fp.stroke()
-
+            flattenFreehand(ann: ann, sx: sx, sy: sy, canvasSize: canvasSize, nsColor: nsColor)
         case .blur:
-            let blurRect = NSRect(
-                x: min(s.x, e.x), y: min(s.y, e.y),
-                width: abs(e.x - s.x), height: abs(e.y - s.y)
-            )
-            guard blurRect.width > 1 && blurRect.height > 1 else { break }
-
-            let scaledRadius = ann.blurRadius * sx
-            // Extract with padding to avoid edge artifacts
-            let pad = scaledRadius * 2
-            let padRect = NSRect(
-                x: max(0, blurRect.origin.x - pad),
-                y: max(0, blurRect.origin.y - pad),
-                width: min(imgSize.width - max(0, blurRect.origin.x - pad), blurRect.width + pad * 2),
-                height: min(imgSize.height - max(0, blurRect.origin.y - pad), blurRect.height + pad * 2)
-            )
-
-            // Restore rotation transform before unlocking focus (blur needs to extract unrotated pixels)
-            if hasRotation { NSGraphicsContext.restoreGraphicsState() }
-            result.unlockFocus()
-            let padRegion = NSImage(size: padRect.size)
-            padRegion.lockFocus()
-            result.draw(in: NSRect(origin: .zero, size: padRect.size),
-                        from: padRect, operation: .copy, fraction: 1.0)
-            padRegion.unlockFocus()
-
-            guard let tiff = padRegion.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let cgRegion = bitmap.cgImage else {
-                result.lockFocus()
-                // Re-save state for the end-of-loop restore
-                if hasRotation { NSGraphicsContext.saveGraphicsState() }
-                break
-            }
-
-            let ciImage = CIImage(cgImage: cgRegion)
-            let fullExtent = ciImage.extent
-            // The actual blur region within the padded image
-            let innerRect = CGRect(
-                x: blurRect.origin.x - padRect.origin.x,
-                y: blurRect.origin.y - padRect.origin.y,
-                width: blurRect.width,
-                height: blurRect.height
-            )
-
-            let clamped = ciImage.clampedToExtent()
-            let output: CIImage?
-            switch ann.blurStyle {
-            case .gaussian:
-                let f = CIFilter(name: "CIGaussianBlur")!
-                f.setValue(clamped, forKey: kCIInputImageKey)
-                f.setValue(scaledRadius, forKey: kCIInputRadiusKey)
-                output = f.outputImage?.cropped(to: fullExtent)
-            case .pixelate:
-                let f = CIFilter(name: "CIPixellate")!
-                f.setValue(clamped, forKey: kCIInputImageKey)
-                f.setValue(max(scaledRadius * 1.2, 8), forKey: kCIInputScaleKey)
-                f.setValue(CIVector(x: fullExtent.midX, y: fullExtent.midY), forKey: kCIInputCenterKey)
-                output = f.outputImage?.cropped(to: fullExtent)
-            }
-
-            result.lockFocus()
-            // Re-save and re-apply rotation transform after re-locking focus for blur
-            if hasRotation {
-                NSGraphicsContext.saveGraphicsState()
-                let canvasRect = ann.boundingRect
-                let cx = canvasRect.midX * sx
-                let cy = (canvasSize.height - canvasRect.midY) * sy
-                let transform = NSAffineTransform()
-                transform.translateX(by: cx, yBy: cy)
-                transform.rotate(byDegrees: CGFloat(-ann.rotation))
-                transform.translateX(by: -cx, yBy: -cy)
-                transform.concat()
-            }
-            if let out = output,
-               let cgResult = CIContext().createCGImage(out, from: fullExtent) {
-                // Draw only the inner (non-padded) part back
-                let fullBlurred = NSImage(cgImage: cgResult, size: padRect.size)
-                fullBlurred.draw(in: blurRect, from: innerRect,
-                                 operation: .copy, fraction: 1.0)
-            }
+            flattenBlur(ann: ann, s: s, e: e, sx: sx, sy: sy, canvasSize: canvasSize,
+                        imgSize: imgSize, result: result, hasRotation: hasRotation)
         }
 
-        // Restore graphics state after rotation
         if hasRotation {
             NSGraphicsContext.restoreGraphicsState()
         }
@@ -404,15 +80,261 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
     return result
 }
 
+// MARK: - Flatten helpers
 
+private func flattenArrow(ann: Annotation, s: NSPoint, e: NSPoint, sx: CGFloat, sy: CGFloat, canvasSize: CGSize) {
+    let cp: NSPoint? = ann.controlPoint.map { NSPoint(x: $0.x * sx, y: (canvasSize.height - $0.y) * sy) }
+    let angle: CGFloat
+    if let cp = cp { angle = atan2(e.y - cp.y, e.x - cp.x) }
+    else { angle = atan2(e.y - s.y, e.x - s.x) }
+    let lw = ann.lineWidth * sx
+
+    switch ann.arrowStyle {
+    case .thin:
+        let path = NSBezierPath(); path.lineWidth = lw
+        path.move(to: s)
+        if let cp = cp { path.curve(to: e, controlPoint1: cp, controlPoint2: cp) } else { path.line(to: e) }
+        path.stroke()
+        let hl: CGFloat = 15 * sx, ha: CGFloat = .pi / 6
+        let ap = NSBezierPath(); ap.lineWidth = lw
+        ap.move(to: e)
+        ap.line(to: NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha)))
+        ap.move(to: e)
+        ap.line(to: NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha)))
+        ap.stroke()
+
+    case .outline:
+        let hl: CGFloat = 20 * sx, ha: CGFloat = .pi / 6
+        let left = NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha))
+        let right = NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha))
+        let baseCenter = NSPoint(x: (left.x + right.x) / 2, y: (left.y + right.y) / 2)
+        let sp = NSBezierPath(); sp.lineWidth = lw
+        sp.move(to: s)
+        if let cp = cp { sp.curve(to: baseCenter, controlPoint1: cp, controlPoint2: cp) } else { sp.line(to: baseCenter) }
+        sp.stroke()
+        let hp = NSBezierPath(); hp.lineWidth = lw
+        hp.move(to: e); hp.line(to: left); hp.line(to: right); hp.close()
+        hp.stroke()
+
+    case .filled:
+        let shaftWidth = lw * 3
+        let headLength = max(shaftWidth * 3, 30 * sx)
+        let headWidth = max(shaftWidth * 2.5, 25 * sx)
+
+        if let cp = cp {
+            let totalLength = hypot(e.x - s.x, e.y - s.y)
+            guard totalLength > 1 else { break }
+            let headRatio = min(headLength / totalLength, 0.5)
+            let shaftEndT = max(0, 1.0 - headRatio)
+            let steps = 12
+
+            func bezPt(_ t: CGFloat) -> NSPoint {
+                let omt = 1 - t
+                return NSPoint(x: omt * omt * s.x + 2 * omt * t * cp.x + t * t * e.x,
+                               y: omt * omt * s.y + 2 * omt * t * cp.y + t * t * e.y)
+            }
+            func bezTang(_ t: CGFloat) -> CGFloat {
+                let dx = 2 * (1 - t) * (cp.x - s.x) + 2 * t * (e.x - cp.x)
+                let dy = 2 * (1 - t) * (cp.y - s.y) + 2 * t * (e.y - cp.y)
+                return atan2(dy, dx)
+            }
+
+            let shaftEnd = bezPt(shaftEndT)
+            let perpHead = bezTang(1.0) + .pi / 2
+            let leftHead = NSPoint(x: shaftEnd.x + headWidth * cos(perpHead), y: shaftEnd.y + headWidth * sin(perpHead))
+            let rightHead = NSPoint(x: shaftEnd.x - headWidth * cos(perpHead), y: shaftEnd.y - headWidth * sin(perpHead))
+
+            var leftPts: [NSPoint] = [], rightPts: [NSPoint] = []
+            for i in 0...steps {
+                let t = CGFloat(i) / CGFloat(steps) * shaftEndT
+                let pt = bezPt(t)
+                let tang = bezTang(t)
+                let perp = tang + .pi / 2
+                let hw = shaftWidth / 2
+                leftPts.append(NSPoint(x: pt.x + hw * cos(perp), y: pt.y + hw * sin(perp)))
+                rightPts.append(NSPoint(x: pt.x - hw * cos(perp), y: pt.y - hw * sin(perp)))
+            }
+
+            let fp = NSBezierPath()
+            fp.move(to: leftPts[0])
+            for i in 1..<leftPts.count { fp.line(to: leftPts[i]) }
+            fp.line(to: leftHead); fp.line(to: e); fp.line(to: rightHead)
+            for i in stride(from: rightPts.count - 1, through: 0, by: -1) { fp.line(to: rightPts[i]) }
+            fp.close()
+            NSColor(ann.color).setFill(); fp.fill()
+        } else {
+            let perpAngle = angle + .pi / 2
+            let halfShaft = shaftWidth / 2
+            let headBase = NSPoint(x: e.x - headLength * cos(angle), y: e.y - headLength * sin(angle))
+
+            let fp = NSBezierPath()
+            fp.move(to: NSPoint(x: s.x + halfShaft * cos(perpAngle), y: s.y + halfShaft * sin(perpAngle)))
+            fp.line(to: NSPoint(x: headBase.x + halfShaft * cos(perpAngle), y: headBase.y + halfShaft * sin(perpAngle)))
+            fp.line(to: NSPoint(x: headBase.x + headWidth * cos(perpAngle), y: headBase.y + headWidth * sin(perpAngle)))
+            fp.line(to: e)
+            fp.line(to: NSPoint(x: headBase.x - headWidth * cos(perpAngle), y: headBase.y - headWidth * sin(perpAngle)))
+            fp.line(to: NSPoint(x: headBase.x - halfShaft * cos(perpAngle), y: headBase.y - halfShaft * sin(perpAngle)))
+            fp.line(to: NSPoint(x: s.x - halfShaft * cos(perpAngle), y: s.y - halfShaft * sin(perpAngle)))
+            fp.close()
+            NSColor(ann.color).setFill(); fp.fill()
+        }
+
+    case .double:
+        let path = NSBezierPath(); path.lineWidth = lw
+        path.move(to: s)
+        if let cp = cp { path.curve(to: e, controlPoint1: cp, controlPoint2: cp) } else { path.line(to: e) }
+        path.stroke()
+        let hl: CGFloat = 15 * sx, ha: CGFloat = .pi / 6
+        let ap1 = NSBezierPath(); ap1.lineWidth = lw
+        ap1.move(to: e)
+        ap1.line(to: NSPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha)))
+        ap1.move(to: e)
+        ap1.line(to: NSPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha)))
+        ap1.stroke()
+        let startAngle: CGFloat
+        if let cp = cp { startAngle = atan2(s.y - cp.y, s.x - cp.x) }
+        else { startAngle = atan2(s.y - e.y, s.x - e.x) }
+        let ap2 = NSBezierPath(); ap2.lineWidth = lw
+        ap2.move(to: s)
+        ap2.line(to: NSPoint(x: s.x - hl * cos(startAngle - ha), y: s.y - hl * sin(startAngle - ha)))
+        ap2.move(to: s)
+        ap2.line(to: NSPoint(x: s.x - hl * cos(startAngle + ha), y: s.y - hl * sin(startAngle + ha)))
+        ap2.stroke()
+    }
+}
+
+private func flattenText(ann: Annotation, sx: CGFloat, sy: CGFloat, canvasSize: CGSize, nsColor: NSColor) {
+    guard !ann.text.isEmpty else { return }
+    let fSize = ann.fontSize * sx
+    let font = NSFont.systemFont(ofSize: fSize, weight: .medium)
+    let tx = ann.start.x * sx
+    let ty = (canvasSize.height - ann.start.y) * sy
+
+    if ann.textHasBackground {
+        let textW = max(CGFloat(ann.text.count) * fSize * 0.55 + 10 * sx, 20 * sx)
+        let textH = fSize * 1.3 + 8 * sy
+        let bgRect = NSRect(x: tx, y: ty - textH, width: textW, height: textH)
+        let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 4 * sx, yRadius: 4 * sy)
+        nsColor.setFill()
+        bgPath.fill()
+
+        let rgbColor = nsColor.usingColorSpace(.deviceRGB) ?? nsColor
+        let r = rgbColor.redComponent, g = rgbColor.greenComponent, b = rgbColor.blueComponent
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        let textNSColor: NSColor = luminance > 0.6 ? .black : .white
+
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textNSColor]
+        let str = NSAttributedString(string: ann.text, attributes: attrs)
+        str.draw(at: NSPoint(x: tx + 5 * sx, y: ty - textH + 4 * sy))
+    } else {
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: nsColor]
+        let str = NSAttributedString(string: ann.text, attributes: attrs)
+        str.draw(at: NSPoint(x: tx + 5 * sx, y: ty - fSize * 1.3 - 4 * sy))
+    }
+}
+
+private func flattenFreehand(ann: Annotation, sx: CGFloat, sy: CGFloat, canvasSize: CGSize, nsColor: NSColor) {
+    guard ann.points.count >= 2 else { return }
+    let fp = NSBezierPath(); fp.lineWidth = ann.lineWidth * sx
+    let first = NSPoint(x: ann.points[0].x * sx, y: (canvasSize.height - ann.points[0].y) * sy)
+    fp.move(to: first)
+    for i in 1..<ann.points.count {
+        let pt = NSPoint(x: ann.points[i].x * sx, y: (canvasSize.height - ann.points[i].y) * sy)
+        let prev = NSPoint(x: ann.points[i-1].x * sx, y: (canvasSize.height - ann.points[i-1].y) * sy)
+        let mid = NSPoint(x: (prev.x + pt.x) / 2, y: (prev.y + pt.y) / 2)
+        fp.curve(to: mid, controlPoint1: prev, controlPoint2: prev)
+    }
+    let last = NSPoint(x: ann.points.last!.x * sx, y: (canvasSize.height - ann.points.last!.y) * sy)
+    fp.line(to: last)
+    nsColor.setStroke()
+    fp.stroke()
+}
+
+private func flattenBlur(ann: Annotation, s: NSPoint, e: NSPoint, sx: CGFloat, sy: CGFloat,
+                          canvasSize: CGSize, imgSize: NSSize, result: NSImage, hasRotation: Bool) {
+    let blurRect = NSRect(
+        x: min(s.x, e.x), y: min(s.y, e.y),
+        width: abs(e.x - s.x), height: abs(e.y - s.y)
+    )
+    guard blurRect.width > 1 && blurRect.height > 1 else { return }
+
+    let scaledRadius = ann.blurRadius * sx
+    let pad = scaledRadius * 2
+    let padRect = NSRect(
+        x: max(0, blurRect.origin.x - pad),
+        y: max(0, blurRect.origin.y - pad),
+        width: min(imgSize.width - max(0, blurRect.origin.x - pad), blurRect.width + pad * 2),
+        height: min(imgSize.height - max(0, blurRect.origin.y - pad), blurRect.height + pad * 2)
+    )
+
+    if hasRotation { NSGraphicsContext.restoreGraphicsState() }
+    result.unlockFocus()
+    let padRegion = NSImage(size: padRect.size)
+    padRegion.lockFocus()
+    result.draw(in: NSRect(origin: .zero, size: padRect.size),
+                from: padRect, operation: .copy, fraction: 1.0)
+    padRegion.unlockFocus()
+
+    guard let tiff = padRegion.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: tiff),
+          let cgRegion = bitmap.cgImage else {
+        result.lockFocus()
+        if hasRotation { NSGraphicsContext.saveGraphicsState() }
+        return
+    }
+
+    let ciImage = CIImage(cgImage: cgRegion)
+    let fullExtent = ciImage.extent
+    let innerRect = CGRect(
+        x: blurRect.origin.x - padRect.origin.x,
+        y: blurRect.origin.y - padRect.origin.y,
+        width: blurRect.width,
+        height: blurRect.height
+    )
+
+    let clamped = ciImage.clampedToExtent()
+    let output: CIImage?
+    switch ann.blurStyle {
+    case .gaussian:
+        let f = CIFilter(name: "CIGaussianBlur")!
+        f.setValue(clamped, forKey: kCIInputImageKey)
+        f.setValue(scaledRadius, forKey: kCIInputRadiusKey)
+        output = f.outputImage?.cropped(to: fullExtent)
+    case .pixelate:
+        let f = CIFilter(name: "CIPixellate")!
+        f.setValue(clamped, forKey: kCIInputImageKey)
+        f.setValue(max(scaledRadius * 1.2, 8), forKey: kCIInputScaleKey)
+        f.setValue(CIVector(x: fullExtent.midX, y: fullExtent.midY), forKey: kCIInputCenterKey)
+        output = f.outputImage?.cropped(to: fullExtent)
+    }
+
+    result.lockFocus()
+    if hasRotation {
+        NSGraphicsContext.saveGraphicsState()
+        let canvasRect = ann.boundingRect
+        let cx = canvasRect.midX * sx
+        let cy = (canvasSize.height - canvasRect.midY) * sy
+        let transform = NSAffineTransform()
+        transform.translateX(by: cx, yBy: cy)
+        transform.rotate(byDegrees: CGFloat(-ann.rotation))
+        transform.translateX(by: -cx, yBy: -cy)
+        transform.concat()
+    }
+    if let out = output,
+       let cgResult = CIContext().createCGImage(out, from: fullExtent) {
+        let fullBlurred = NSImage(cgImage: cgResult, size: padRect.size)
+        fullBlurred.draw(in: blurRect, from: innerRect,
+                         operation: .copy, fraction: 1.0)
+    }
+}
 
 // MARK: - Drag interaction state
 
 enum CanvasInteraction {
     case none
-    case drawing(Annotation)          // creating new shape
-    case moving(UUID, CGPoint)        // moving annotation, last point
-    case resizing(UUID, ResizeHandle)  // resizing via handle
-    case freehand([CGPoint])          // collecting freehand points
-    case rotating(UUID)               // rotating annotation
+    case drawing(Annotation)
+    case moving(UUID, CGPoint)
+    case resizing(UUID, ResizeHandle)
+    case freehand([CGPoint])
+    case rotating(UUID)
 }
