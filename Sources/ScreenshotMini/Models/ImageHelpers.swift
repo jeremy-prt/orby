@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 // MARK: - Save helper
 
@@ -247,11 +249,78 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
             fp.line(to: last)
             nsColor.setStroke()
             fp.stroke()
+
+        case .blur:
+            let blurRect = NSRect(
+                x: min(s.x, e.x), y: min(s.y, e.y),
+                width: abs(e.x - s.x), height: abs(e.y - s.y)
+            )
+            guard blurRect.width > 1 && blurRect.height > 1 else { break }
+
+            let scaledRadius = ann.blurRadius * sx
+            // Extract with padding to avoid edge artifacts
+            let pad = scaledRadius * 2
+            let padRect = NSRect(
+                x: max(0, blurRect.origin.x - pad),
+                y: max(0, blurRect.origin.y - pad),
+                width: min(imgSize.width - max(0, blurRect.origin.x - pad), blurRect.width + pad * 2),
+                height: min(imgSize.height - max(0, blurRect.origin.y - pad), blurRect.height + pad * 2)
+            )
+
+            result.unlockFocus()
+            let padRegion = NSImage(size: padRect.size)
+            padRegion.lockFocus()
+            result.draw(in: NSRect(origin: .zero, size: padRect.size),
+                        from: padRect, operation: .copy, fraction: 1.0)
+            padRegion.unlockFocus()
+
+            guard let tiff = padRegion.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let cgRegion = bitmap.cgImage else {
+                result.lockFocus(); break
+            }
+
+            let ciImage = CIImage(cgImage: cgRegion)
+            let fullExtent = ciImage.extent
+            // The actual blur region within the padded image
+            let innerRect = CGRect(
+                x: blurRect.origin.x - padRect.origin.x,
+                y: blurRect.origin.y - padRect.origin.y,
+                width: blurRect.width,
+                height: blurRect.height
+            )
+
+            let clamped = ciImage.clampedToExtent()
+            let output: CIImage?
+            switch ann.blurStyle {
+            case .gaussian:
+                let f = CIFilter(name: "CIGaussianBlur")!
+                f.setValue(clamped, forKey: kCIInputImageKey)
+                f.setValue(scaledRadius, forKey: kCIInputRadiusKey)
+                output = f.outputImage?.cropped(to: fullExtent)
+            case .pixelate:
+                let f = CIFilter(name: "CIPixellate")!
+                f.setValue(clamped, forKey: kCIInputImageKey)
+                f.setValue(max(scaledRadius * 1.2, 8), forKey: kCIInputScaleKey)
+                f.setValue(CIVector(x: fullExtent.midX, y: fullExtent.midY), forKey: kCIInputCenterKey)
+                output = f.outputImage?.cropped(to: fullExtent)
+            }
+
+            result.lockFocus()
+            if let out = output,
+               let cgResult = CIContext().createCGImage(out, from: fullExtent) {
+                // Draw only the inner (non-padded) part back
+                let fullBlurred = NSImage(cgImage: cgResult, size: padRect.size)
+                fullBlurred.draw(in: blurRect, from: innerRect,
+                                 operation: .copy, fraction: 1.0)
+            }
         }
     }
     result.unlockFocus()
     return result
 }
+
+
 
 // MARK: - Drag interaction state
 

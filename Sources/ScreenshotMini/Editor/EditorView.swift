@@ -39,6 +39,8 @@ struct EditorView: View {
     @State private var fontSize: CGFloat = 20
     @State private var arrowStyle: ArrowStyle = .thin
     @State private var textHasBackground: Bool = true
+    @State private var blurRadius: CGFloat = 10
+    @State private var blurStyle: BlurStyle = .gaussian
 
     private var selectedAnnotation: Annotation? {
         guard let id = selectedId else { return nil }
@@ -50,6 +52,7 @@ struct EditorView: View {
         case "rect": .rect; case "circle": .circle
         case "line": .line; case "arrow": .arrow
         case "text": .text; case "draw": .freehand
+        case "blur": .blur
         default: nil
         }
     }
@@ -70,6 +73,7 @@ struct EditorView: View {
         ("arrow.up.right", "arrow", "Arrow", "A"),
         ("character.textbox", "text", "Text", "T"),
         ("applepencil.gen1", "draw", "Draw", "D"),
+        ("eye.slash", "blur", "Blur", "B"),
     ]
 
     var body: some View {
@@ -103,6 +107,7 @@ struct EditorView: View {
                 Button("") { selectTool("arrow") }.keyboardShortcut("a", modifiers: []).hidden()
                 Button("") { selectTool("text") }.keyboardShortcut("t", modifiers: []).hidden()
                 Button("") { selectTool("draw") }.keyboardShortcut("d", modifiers: []).hidden()
+                Button("") { selectTool("blur") }.keyboardShortcut("b", modifiers: []).hidden()
                 Button("") { selectTool(nil) }.keyboardShortcut(.escape, modifiers: []).hidden()
             }
             .frame(width: 0, height: 0)
@@ -185,7 +190,12 @@ struct EditorView: View {
                     // Annotations (hide text being edited to avoid duplication)
                     ForEach(history.annotations) { ann in
                         if ann.id != editingTextId {
-                            AnnotationView(annotation: ann)
+                            if ann.shape == .blur {
+                                BlurRegionView(annotation: ann, image: currentImage,
+                                               canvasSize: CGSize(width: dw, height: dh))
+                            } else {
+                                AnnotationView(annotation: ann)
+                            }
                         }
                     }.frame(width: dw, height: dh)
 
@@ -197,7 +207,13 @@ struct EditorView: View {
 
                     // Drawing in progress
                     if case .drawing(let ann) = interaction {
-                        AnnotationView(annotation: ann).frame(width: dw, height: dh)
+                        if ann.shape == .blur {
+                            BlurRegionView(annotation: ann, image: currentImage,
+                                           canvasSize: CGSize(width: dw, height: dh))
+                                .frame(width: dw, height: dh)
+                        } else {
+                            AnnotationView(annotation: ann).frame(width: dw, height: dh)
+                        }
                     }
                     if case .freehand(let pts) = interaction, pts.count >= 2 {
                         FreehandPreview(points: pts, color: annotationColor, lineWidth: annotationLineWidth)
@@ -270,6 +286,8 @@ struct EditorView: View {
                     onChangeFontSize: { s in setAnnotationFontSize(s); fontSize = s },
                     onChangeArrowStyle: { s in setAnnotationArrowStyle(s); arrowStyle = s },
                     onChangeTextBackground: { v in setAnnotationTextBackground(v); textHasBackground = v },
+                    onChangeBlurRadius: { r in setAnnotationBlurRadius(r); blurRadius = r },
+                    onChangeBlurStyle: { s in setAnnotationBlurStyle(s); blurStyle = s },
                     onDeselect: { selectedId = nil; selectedTool = "cursor" },
                     onDelete: { deleteSelected() }
                 )
@@ -329,7 +347,8 @@ struct EditorView: View {
                 interaction = .drawing(Annotation(shape: shape, start: start, end: current,
                                                   color: annotationColor, lineWidth: annotationLineWidth,
                                                   filled: annotationFilled, solidFill: annotationSolidFill,
-                                                  arrowStyle: shape == .arrow ? arrowStyle : .thin))
+                                                  arrowStyle: shape == .arrow ? arrowStyle : .thin,
+                                                  blurRadius: blurRadius, blurStyle: blurStyle))
             }
             // Priority 5: Deselect if clicking on nothing
             else {
@@ -544,13 +563,15 @@ struct EditorView: View {
             case "rect": .rect; case "circle": .circle
             case "line": .line; case "arrow": .arrow
             case "text": .text; case "draw": .freehand
+            case "blur": .blur
             default: .rect
         }
         return Annotation(shape: shape, start: .zero, end: .zero,
                           color: annotationColor, lineWidth: annotationLineWidth,
                           filled: annotationFilled, solidFill: annotationSolidFill,
                           fontSize: fontSize, arrowStyle: arrowStyle,
-                          textHasBackground: textHasBackground)
+                          textHasBackground: textHasBackground,
+                          blurRadius: blurRadius, blurStyle: blurStyle)
     }
 
     private func commitTextIfNeeded() {
@@ -619,6 +640,20 @@ struct EditorView: View {
         guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].textHasBackground = value
+    }
+
+    private func setAnnotationBlurRadius(_ radius: CGFloat) {
+        blurRadius = radius
+        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        history.save()
+        history.annotations[idx].blurRadius = radius
+    }
+
+    private func setAnnotationBlurStyle(_ style: BlurStyle) {
+        blurStyle = style
+        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        history.save()
+        history.annotations[idx].blurStyle = style
     }
 
 }

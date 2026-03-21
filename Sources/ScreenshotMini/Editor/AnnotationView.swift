@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreImage
 
 // MARK: - Annotation View
 
@@ -9,6 +10,8 @@ struct AnnotationView: View {
     var body: some View {
         if annotation.shape == .text {
             textView
+        } else if annotation.shape == .blur {
+            blurPreview
         } else {
             Canvas { ctx, _ in
                 if annotation.shape == .freehand {
@@ -28,6 +31,75 @@ struct AnnotationView: View {
                 }
             }
             .allowsHitTesting(false)
+        }
+    }
+
+    // MARK: - Blur preview (visual indicator in editor)
+
+    @ViewBuilder
+    private var blurPreview: some View {
+        let rect = annotation.boundingRect
+        ZStack {
+            // Background fill varies by blur style
+            switch annotation.blurStyle {
+            case .gaussian:
+                // Diagonal lines pattern over semi-transparent fill
+                Canvas { ctx, size in
+                    let r = CGRect(origin: .zero, size: size)
+                    ctx.fill(Path(r), with: .color(Color.gray.opacity(0.25)))
+                    // Diagonal lines
+                    var lines = Path()
+                    let spacing: CGFloat = 6
+                    let maxDim = size.width + size.height
+                    var offset: CGFloat = -maxDim
+                    while offset < maxDim {
+                        lines.move(to: CGPoint(x: offset, y: 0))
+                        lines.addLine(to: CGPoint(x: offset + size.height, y: size.height))
+                        offset += spacing
+                    }
+                    ctx.stroke(lines, with: .color(Color.gray.opacity(0.3)), lineWidth: 1)
+                }
+                .frame(width: rect.width, height: rect.height)
+            case .pixelate:
+                // Grid pattern
+                Canvas { ctx, size in
+                    let r = CGRect(origin: .zero, size: size)
+                    ctx.fill(Path(r), with: .color(Color.gray.opacity(0.25)))
+                    let cellSize: CGFloat = 8
+                    var grid = Path()
+                    var x: CGFloat = 0
+                    while x <= size.width {
+                        grid.move(to: CGPoint(x: x, y: 0))
+                        grid.addLine(to: CGPoint(x: x, y: size.height))
+                        x += cellSize
+                    }
+                    var y: CGFloat = 0
+                    while y <= size.height {
+                        grid.move(to: CGPoint(x: 0, y: y))
+                        grid.addLine(to: CGPoint(x: size.width, y: y))
+                        y += cellSize
+                    }
+                    ctx.stroke(grid, with: .color(Color.gray.opacity(0.3)), lineWidth: 0.5)
+                }
+                .frame(width: rect.width, height: rect.height)
+            }
+
+            // Icon label in center
+            Image(systemName: blurStyleIcon)
+                .font(.system(size: min(rect.width, rect.height) * 0.3, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.7))
+        }
+        .frame(width: rect.width, height: rect.height)
+        .clipShape(Rectangle())
+        .overlay(Rectangle().stroke(Color.gray.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        .position(x: rect.midX, y: rect.midY)
+        .allowsHitTesting(false)
+    }
+
+    private var blurStyleIcon: String {
+        switch annotation.blurStyle {
+        case .gaussian: "aqi.medium"
+        case .pixelate: "square.grid.3x3"
         }
     }
 
@@ -89,7 +161,7 @@ struct AnnotationView: View {
         case .rect: p.addRect(r)
         case .circle: p.addEllipse(in: r)
         case .line: p.move(to: s); p.addLine(to: e)
-        case .arrow, .text, .freehand: break
+        case .arrow, .text, .freehand, .blur: break
         }
         return p
     }
@@ -313,6 +385,91 @@ struct AnnotationView: View {
 }
 
 // MARK: - Freehand Preview (during drawing)
+
+// MARK: - Live Blur Region View
+
+struct BlurRegionView: View {
+    let annotation: Annotation
+    let image: NSImage
+    let canvasSize: CGSize
+
+    var body: some View {
+        let rect = annotation.boundingRect
+        guard rect.width > 2 && rect.height > 2 else { return AnyView(EmptyView()) }
+
+        let blurredImage = createBlurredRegion()
+        return AnyView(
+            Group {
+                if let blurredImage {
+                    Image(nsImage: blurredImage)
+                        .resizable()
+                        .frame(width: rect.width, height: rect.height)
+                } else {
+                    Rectangle().fill(Color.gray.opacity(0.5))
+                        .frame(width: rect.width, height: rect.height)
+                }
+            }
+            .clipShape(Rectangle())
+            .position(x: rect.midX, y: rect.midY)
+            .allowsHitTesting(false)
+        )
+    }
+
+    private func createBlurredRegion() -> NSImage? {
+        let rect = annotation.boundingRect
+        let sx = image.size.width / canvasSize.width
+        let sy = image.size.height / canvasSize.height
+
+        // Source rect in NSImage coordinates (Y-up: origin at bottom-left)
+        let srcRect = NSRect(
+            x: rect.origin.x * sx,
+            y: (canvasSize.height - rect.origin.y - rect.height) * sy,
+            width: rect.width * sx,
+            height: rect.height * sy
+        )
+        let regionSize = srcRect.size
+        guard regionSize.width > 1 && regionSize.height > 1 else { return nil }
+
+        // Step 1: Extract region using NSImage draw (handles coordinate system properly)
+        let region = NSImage(size: regionSize)
+        region.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: regionSize),
+                   from: srcRect, operation: .copy, fraction: 1.0)
+        region.unlockFocus()
+
+        // Step 2: Convert to CIImage and apply filter
+        guard let tiff = region.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let cgImg = bitmap.cgImage else { return nil }
+
+        let ciImage = CIImage(cgImage: cgImg)
+        let extent = ciImage.extent
+        let scaledRadius = annotation.blurRadius * max(sx, sy)
+
+        // Clamp edges to prevent black borders
+        let clamped = ciImage.clampedToExtent()
+
+        let output: CIImage?
+        switch annotation.blurStyle {
+        case .gaussian:
+            let f = CIFilter(name: "CIGaussianBlur")!
+            f.setValue(clamped, forKey: kCIInputImageKey)
+            f.setValue(scaledRadius, forKey: kCIInputRadiusKey)
+            output = f.outputImage?.cropped(to: extent)
+        case .pixelate:
+            let f = CIFilter(name: "CIPixellate")!
+            f.setValue(ciImage, forKey: kCIInputImageKey)
+            f.setValue(max(scaledRadius * 1.2, 8), forKey: kCIInputScaleKey)
+            f.setValue(CIVector(x: extent.midX, y: extent.midY), forKey: kCIInputCenterKey)
+            output = f.outputImage?.cropped(to: extent)
+        }
+
+        guard let out = output,
+              let cgResult = CIContext().createCGImage(out, from: extent) else { return nil }
+
+        return NSImage(cgImage: cgResult, size: regionSize)
+    }
+}
 
 struct FreehandPreview: View {
     let points: [CGPoint]

@@ -16,6 +16,8 @@ struct AnnotationToolbar: View {
     let onChangeFontSize: (CGFloat) -> Void
     let onChangeArrowStyle: (ArrowStyle) -> Void
     let onChangeTextBackground: (Bool) -> Void
+    let onChangeBlurRadius: (CGFloat) -> Void
+    let onChangeBlurStyle: (BlurStyle) -> Void
     let onDeselect: () -> Void
     let onDelete: () -> Void
 
@@ -34,21 +36,23 @@ struct AnnotationToolbar: View {
 
             Divider().frame(height: 18)
 
-            // Single color circle — tap to show color picker
-            Button { showColorPicker.toggle() } label: {
-                Circle()
-                    .fill(annotation.color)
-                    .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5))
-                    .frame(width: 20, height: 20)
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $showColorPicker, arrowEdge: .bottom) {
-                colorPickerContent
+            // Single color circle — tap to show color picker (hidden for blur)
+            if annotation.shape != .blur {
+                Button { showColorPicker.toggle() } label: {
+                    Circle()
+                        .fill(annotation.color)
+                        .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showColorPicker, arrowEdge: .bottom) {
+                    colorPickerContent
+                }
+
+                Divider().frame(height: 18)
             }
 
-            Divider().frame(height: 18)
-
-            // Thickness or font size
+            // Thickness or font size (not for blur — blur has its own radius slider)
             if annotation.shape == .text {
                 ThicknessSlider(
                     value: annotation.fontSize,
@@ -58,7 +62,7 @@ struct AnnotationToolbar: View {
                 Text("\(Int(annotation.fontSize))px")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary).frame(width: 30)
-            } else {
+            } else if annotation.shape != .blur {
                 thicknessControl
             }
 
@@ -117,6 +121,27 @@ struct AnnotationToolbar: View {
                                      active: annotation.arrowStyle == .filled, weight: .regular)
                     arrowStyleButton(icon: "arrow.left.and.right", style: .double,
                                      active: annotation.arrowStyle == .double, weight: .regular)
+                }
+            }
+
+            // Blur controls (only for blur)
+            if annotation.shape == .blur {
+                Divider().frame(height: 18)
+                ThicknessSlider(
+                    value: annotation.blurRadius,
+                    range: 5...30,
+                    onChange: onChangeBlurRadius
+                )
+                Text("\(Int(annotation.blurRadius))")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary).frame(width: 20)
+
+                Divider().frame(height: 18)
+                HStack(spacing: 2) {
+                    blurStyleButton(icon: "aqi.medium", style: .gaussian,
+                                    active: annotation.blurStyle == .gaussian)
+                    blurStyleButton(icon: "square.grid.3x3", style: .pixelate,
+                                    active: annotation.blurStyle == .pixelate)
                 }
             }
         }
@@ -186,6 +211,16 @@ struct AnnotationToolbar: View {
         Button { onChangeArrowStyle(style) } label: {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: weight))
+                .frame(width: 24, height: 22)
+                .background(RoundedRectangle(cornerRadius: 4)
+                    .fill(active ? brandPurple.opacity(0.2) : Color.clear))
+        }.buttonStyle(.plain)
+    }
+
+    private func blurStyleButton(icon: String, style: BlurStyle, active: Bool) -> some View {
+        Button { onChangeBlurStyle(style) } label: {
+            Image(systemName: icon)
+                .font(.system(size: 13))
                 .frame(width: 24, height: 22)
                 .background(RoundedRectangle(cornerRadius: 4)
                     .fill(active ? brandPurple.opacity(0.2) : Color.clear))

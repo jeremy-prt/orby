@@ -3,7 +3,14 @@ import SwiftUI
 // MARK: - Shape types
 
 enum AnnotationShape: Equatable, Sendable {
-    case rect, circle, line, arrow, text, freehand
+    case rect, circle, line, arrow, text, freehand, blur
+}
+
+// MARK: - Blur style
+
+enum BlurStyle: Equatable, Sendable {
+    case gaussian   // classic Gaussian blur
+    case pixelate   // mosaic / pixelate
 }
 
 // MARK: - Arrow style
@@ -40,12 +47,15 @@ struct Annotation: Identifiable, Equatable {
     var arrowStyle: ArrowStyle
     var controlPoint: CGPoint?
     var textHasBackground: Bool
+    var blurRadius: CGFloat
+    var blurStyle: BlurStyle
 
     init(shape: AnnotationShape, start: CGPoint, end: CGPoint,
          color: Color = .red, lineWidth: CGFloat = 3, filled: Bool = false, solidFill: Bool = false,
          text: String = "", fontSize: CGFloat = 20, points: [CGPoint] = [],
          arrowStyle: ArrowStyle = .thin, controlPoint: CGPoint? = nil,
-         textHasBackground: Bool = true) {
+         textHasBackground: Bool = true,
+         blurRadius: CGFloat = 10, blurStyle: BlurStyle = .gaussian) {
         self.id = UUID()
         self.shape = shape
         self.start = start
@@ -60,6 +70,8 @@ struct Annotation: Identifiable, Equatable {
         self.arrowStyle = arrowStyle
         self.controlPoint = controlPoint
         self.textHasBackground = textHasBackground
+        self.blurRadius = blurRadius
+        self.blurStyle = blurStyle
     }
 
     var boundingRect: CGRect {
@@ -93,6 +105,8 @@ struct Annotation: Identifiable, Equatable {
 
     func hitTest(_ point: CGPoint, tolerance: CGFloat = 10) -> Bool {
         switch shape {
+        case .blur:
+            return boundingRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point)
         case .rect, .circle:
             if filled { return boundingRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point) }
             let outer = boundingRect.insetBy(dx: -tolerance, dy: -tolerance)
