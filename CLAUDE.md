@@ -90,8 +90,8 @@ docs/                          # Landing page + guide install
   - Tooltips custom avec delai 1s
   - Curseur force arrow via global mouse monitor (empeche cursor bleed-through)
 - **Editeur** :
-  - Outils : curseur/select (V), crop (C), rectangle (R), ellipse (O), ligne (L), fleche (A), texte (T), dessin libre (D), flou (B), background (F)
-  - Raccourcis clavier : V/C/R/O/L/A/T/D/B/F/Esc
+  - Outils : curseur/select (V), crop (C), rectangle (R), ellipse (O), ligne (L), fleche (A), texte (T), dessin libre (D), flou (B), numero (N), background (F)
+  - Raccourcis clavier : V/C/R/O/L/A/T/D/B/N/F/Esc
   - 4 styles de fleche : outline, thin, filled (gros), double (↔)
   - Fleches courbees avec point de controle Bezier (drag du midpoint handle)
   - Color picker compact : cercle unique → popover preset 8 couleurs + custom
@@ -102,10 +102,11 @@ docs/                          # Landing page + guide install
   - Toolbar flottante proprietes annotations (top-right)
   - Toolbar flottante confirmation crop (top-right)
   - Dark mode, toolbar alignee avec traffic lights via NSToolbar unifiedCompact
-  - Undo/redo : ⌘Z / ⌘⇧Z, delete annotation : ⌫, deplacer : fleches clavier, copy : ⌘C, paste : ⌘V
+  - Undo/redo : ⌘Z / ⌘⇧Z, delete annotation : ⌫, deplacer : fleches clavier, copy : ⌘C, paste : ⌘V, save-as : ⌘S (NSSavePanel)
   - Outil texte : cliquer pour placer, editer inline, mode background + plain, multiline (Shift+Enter), resize en direct, clic sur annotation selectionnee → re-edition
   - Outil flou : gaussian blur + pixelate via CIFilter, preview en temps reel, slider rayon
   - Outil background : fond degrade (18 presets) ou couleur unie (12 + custom picker), padding %, coins arrondis %, ombre optionnelle. Preview live dans l'editeur (scaleEffect), export via renderWithBackground (NSImage)
+  - Outil numero (N) : cercles numerotes auto-incrementes (1, 2, 3...), couleur et taille configurables, click to place
   - Bouton share : NSSharingServicePicker natif (AirDrop, Messages, Mail, etc.), ancre au bouton toolbar
 - **Historique des captures** :
   - NSPanel flottant avec grille de thumbnails (style ThumbnailView : blur + glass au hover)
@@ -113,6 +114,7 @@ docs/                          # Landing page + guide install
   - Max 12 captures, images completes + thumbnails dans ~/Library/Application Support/ScreenshotMini/history/
   - Clean complet au relancement de l'app
   - Accessible via menu bar + raccourci global configurable
+  - Drag & drop depuis l'historique vers Finder/navigateur/apps
   - Dessin libre lisse (quadCurve mid-points)
   - Copy/paste annotations : ⌘C / ⌘V (offset +20,+20, pastes successifs cascadent)
   - Option-drag duplicate : ⌥+drag duplique l'annotation (comme Figma)
@@ -200,10 +202,8 @@ bash build-dmg.sh   # compile + re-signe ad-hoc + cree .dmg pour distribution
 - [x] Background tool (degrade/uni, padding, coins arrondis, ombre, preview live + export)
 - [x] Bouton Share dans l'editeur (NSSharingServicePicker)
 - [x] Capture de fenetre (screencapture -w, raccourci configurable)
-- [x] Historique des captures (NSPanel, grille thumbnails, max 12, clean on launch)
+- [x] Historique des captures (NSPanel, grille thumbnails, max 12, clean on launch, drag & drop)
+- [x] Annotations numerotees (cercles 1, 2, 3... click to place)
+- [x] ⌘S save-as dialog (NSSavePanel)
 - [ ] Curseurs de resize specifiques par handle (↔ ↕ etc.) — actuellement crosshair generique
 - [ ] Refaire AppIcon.icns avec le logo app fond violet
-
-## Session de dev en cours
-
-Voir `DEV-SESSION.md` pour le contexte complet et les prochaines etapes.
