@@ -68,7 +68,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 PLIST
 
 # Sign with stable dev certificate (preserves TCC permissions across rebuilds)
-codesign --force --deep -s "Orby Dev" "$APP_BUNDLE" 2>/dev/null || codesign --force --deep -s - "$APP_BUNDLE"
+codesign --force --deep -s "Orby Dev" "$APP_BUNDLE" 2>/dev/null || codesign --force --deep -s "ScreenshotMini Dev" "$APP_BUNDLE" 2>/dev/null || codesign --force --deep -s - "$APP_BUNDLE"
 
 INSTALLED="/Applications/$APP_NAME.app"
 if [ -d "$INSTALLED" ]; then
@@ -80,7 +80,7 @@ if [ -d "$INSTALLED" ]; then
     mkdir -p "$INSTALLED/Contents/Frameworks"
     rm -rf "$INSTALLED/Contents/Frameworks/Sparkle.framework"
     cp -R "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" "$INSTALLED/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true
-    codesign --force --deep -s "Orby Dev" "$INSTALLED" 2>/dev/null || codesign --force --deep -s - "$INSTALLED"
+    codesign --force --deep -s "Orby Dev" "$INSTALLED" 2>/dev/null || codesign --force --deep -s "ScreenshotMini Dev" "$INSTALLED" 2>/dev/null || codesign --force --deep -s - "$INSTALLED"
     xattr -cr "$INSTALLED" 2>/dev/null || true
     echo "Updated. Relaunching..."
     open "$INSTALLED"
