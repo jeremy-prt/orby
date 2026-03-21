@@ -4,28 +4,17 @@ import AppKit
 // MARK: - Custom rotate cursor
 
 @MainActor private let rotateCursor: NSCursor = {
-    let size = NSSize(width: 20, height: 20)
-    let image = NSImage(size: size, flipped: false) { rect in
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-        // Draw a rotation arrow
-        ctx.setStrokeColor(NSColor.labelColor.cgColor)
-        ctx.setLineWidth(1.5)
-        ctx.setLineCap(.round)
-        // Arc
-        let center = CGPoint(x: 10, y: 10)
-        ctx.addArc(center: center, radius: 6, startAngle: .pi * 0.2, endAngle: .pi * 1.6, clockwise: false)
-        ctx.strokePath()
-        // Arrowhead at end of arc
-        let tipAngle: CGFloat = .pi * 1.6
-        let tip = CGPoint(x: center.x + 6 * cos(tipAngle), y: center.y + 6 * sin(tipAngle))
-        ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(x: tip.x + 4, y: tip.y - 2))
-        ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(x: tip.x + 1, y: tip.y + 4))
-        ctx.strokePath()
-        return true
+    let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+    if let sfImage = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)?
+        .withSymbolConfiguration(config) {
+        let size = NSSize(width: 22, height: 22)
+        let rendered = NSImage(size: size)
+        rendered.lockFocus()
+        sfImage.draw(in: NSRect(origin: .zero, size: size))
+        rendered.unlockFocus()
+        return NSCursor(image: rendered, hotSpot: NSPoint(x: 11, y: 11))
     }
-    return NSCursor(image: image, hotSpot: NSPoint(x: 10, y: 10))
+    return NSCursor.crosshair
 }()
 
 // MARK: - Editor View

@@ -105,9 +105,25 @@ struct Annotation: Identifiable, Equatable {
         return max(size.width, 20)
     }
 
+    // MARK: - Rotation helper
+
+    /// Un-rotate a point around annotation center (inverse rotation)
+    private func unrotatedPoint(_ point: CGPoint) -> CGPoint {
+        guard rotation != 0 else { return point }
+        let center = CGPoint(x: boundingRect.midX, y: boundingRect.midY)
+        let rad = -rotation * .pi / 180
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        return CGPoint(
+            x: center.x + dx * cos(rad) - dy * sin(rad),
+            y: center.y + dx * sin(rad) + dy * cos(rad)
+        )
+    }
+
     // MARK: - Hit testing
 
     func hitTest(_ point: CGPoint, tolerance: CGFloat = 10) -> Bool {
+        let point = unrotatedPoint(point)
         switch shape {
         case .blur:
             return boundingRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point)
@@ -135,14 +151,25 @@ struct Annotation: Identifiable, Equatable {
     }
 
     func handleAt(_ point: CGPoint, tolerance: CGFloat = 10) -> ResizeHandle? {
+        // For rotation handle, test in ROTATED space (don't un-rotate)
+        // because the handle visually moves with rotation
         let r = boundingRect
-
-        // Rotation handle: 25px above top-center
-        let rotHandlePos = CGPoint(x: r.midX, y: r.minY - 25)
+        let center = CGPoint(x: r.midX, y: r.midY)
+        let rotHandleUnrotated = CGPoint(x: r.midX, y: r.minY - 25)
+        // Rotate the handle position to where it visually is
+        let rad = rotation * .pi / 180
+        let dx = rotHandleUnrotated.x - center.x
+        let dy = rotHandleUnrotated.y - center.y
+        let rotHandlePos = CGPoint(
+            x: center.x + dx * cos(rad) - dy * sin(rad),
+            y: center.y + dx * sin(rad) + dy * cos(rad)
+        )
         if hypot(point.x - rotHandlePos.x, point.y - rotHandlePos.y) < tolerance {
             return .rotating
         }
 
+        // For corner handles, un-rotate the test point
+        let unrotated = unrotatedPoint(point)
         let corners: [(CGPoint, ResizeHandle)] = [
             (CGPoint(x: r.minX, y: r.minY), .topLeft),
             (CGPoint(x: r.maxX, y: r.minY), .topRight),
@@ -150,14 +177,14 @@ struct Annotation: Identifiable, Equatable {
             (CGPoint(x: r.maxX, y: r.maxY), .bottomRight),
         ]
         for (corner, handle) in corners {
-            if hypot(point.x - corner.x, point.y - corner.y) < tolerance {
+            if hypot(unrotated.x - corner.x, unrotated.y - corner.y) < tolerance {
                 return handle
             }
         }
         // Midpoint handle for arrows (control point or default midpoint)
         if shape == .arrow {
             let mp = controlPoint ?? CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
-            if hypot(point.x - mp.x, point.y - mp.y) < tolerance {
+            if hypot(unrotated.x - mp.x, unrotated.y - mp.y) < tolerance {
                 return .midPoint
             }
         }
