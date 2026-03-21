@@ -9,6 +9,7 @@ struct EditorView: View {
     let onClose: () -> Void
 
     @State private var currentImage: NSImage
+    @State private var imageUndoStack: [(NSImage, [Annotation])] = []
     @State private var selectedTool: String? = "cursor"
     @StateObject private var history = AnnotationHistory()
 
@@ -74,7 +75,7 @@ struct EditorView: View {
         .ignoresSafeArea()
         .background(
             Group {
-                Button("") { history.undo(); syncSelection() }
+                Button("") { undoAction() }
                     .keyboardShortcut("z", modifiers: .command).hidden()
                 Button("") { history.redo(); syncSelection() }
                     .keyboardShortcut("z", modifiers: [.command, .shift]).hidden()
@@ -122,13 +123,6 @@ struct EditorView: View {
                 }
             }
 
-            // Crop confirm
-            if selectedTool == "crop" && cropStart != nil && cropEnd != nil {
-                Divider().frame(height: 20).padding(.horizontal, 4)
-                ToolbarButton(icon: "checkmark", label: "Apply", shortcut: "↩", isActive: false) { applyCrop() }
-                ToolbarButton(icon: "xmark", label: "Cancel", shortcut: "Esc", isActive: false) { cancelTool() }
-            }
-
             Divider().frame(height: 18).padding(.horizontal, 4)
             DragMeButton(image: currentImage)
 
@@ -136,7 +130,7 @@ struct EditorView: View {
 
             // Undo/Redo
             ToolbarButton(icon: "arrow.uturn.backward", label: "Undo", shortcut: "⌘Z", isActive: false) {
-                history.undo(); syncSelection()
+                undoAction()
             }
             ToolbarButton(icon: "arrow.uturn.forward", label: "Redo", shortcut: "⌘⇧Z", isActive: false) {
                 history.redo(); syncSelection()
@@ -252,6 +246,15 @@ struct EditorView: View {
                 .onAppear { canvasSize = CGSize(width: dw, height: dh) }
             }
 
+            // Crop toolbar (top-right)
+            if selectedTool == "crop" && cropStart != nil && cropEnd != nil {
+                CropToolbar(
+                    onApply: { applyCrop() },
+                    onCancel: { cancelTool() }
+                )
+                .padding(8)
+            }
+
             // Annotation properties toolbar (top-right)
             if showPropertiesToolbar {
                 AnnotationToolbar(
@@ -261,7 +264,7 @@ struct EditorView: View {
                     onChangeFillMode: { m in setAnnotationFillMode(m) },
                     onChangeFontSize: { s in setAnnotationFontSize(s); fontSize = s },
                     onChangeArrowStyle: { s in setAnnotationArrowStyle(s); arrowStyle = s },
-                    onDeselect: { selectedId = nil; selectedTool = nil },
+                    onDeselect: { selectedId = nil; selectedTool = "cursor" },
                     onDelete: { deleteSelected() }
                 )
                 .padding(8)
@@ -426,12 +429,14 @@ struct EditorView: View {
         guard let s = cropStart, let e = cropEnd else { return }
         let rect = normalizedRect(from: s, to: e)
         guard rect.width > 5 && rect.height > 5 else { return }
+        // Save state for undo
+        imageUndoStack.append((currentImage, history.annotations))
         if !history.annotations.isEmpty {
             currentImage = flattenAnnotations(history.annotations, onto: currentImage, canvasSize: canvasSize)
             history.annotations.removeAll()
         }
         currentImage = cropImage(currentImage, to: rect, canvasSize: canvasSize)
-        cancelTool()
+        cropStart = nil; cropEnd = nil; interaction = .none
     }
 
     private func selectTool(_ tool: String?) {
@@ -443,6 +448,16 @@ struct EditorView: View {
     private func cancelTool() {
         commitTextIfNeeded()
         selectedTool = nil; cropStart = nil; cropEnd = nil; interaction = .none
+    }
+
+    private func undoAction() {
+        if history.canUndo {
+            history.undo(); syncSelection()
+        } else if let (prevImage, prevAnnotations) = imageUndoStack.popLast() {
+            currentImage = prevImage
+            history.annotations = prevAnnotations
+            syncSelection()
+        }
     }
 
     private func deleteSelected() {
