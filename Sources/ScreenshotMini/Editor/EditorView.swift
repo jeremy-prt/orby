@@ -4,47 +4,53 @@ import AppKit
 // MARK: - Custom rotate cursor
 
 @MainActor private let rotateCursor: NSCursor = {
-    let size: CGFloat = 22
+    let size: CGFloat = 20
+    let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+    guard let symbol = NSImage(systemSymbolName: "arrow.trianglehead.clockwise.rotate.90",
+                               accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else {
+        return NSCursor.arrow
+    }
+
     let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
         guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-        let center = CGPoint(x: size / 2, y: size / 2)
-        let radius: CGFloat = 7
+        let symbolSize = symbol.size
+        let x = (size - symbolSize.width) / 2
+        let y = (size - symbolSize.height) / 2
+        let drawRect = CGRect(x: x, y: y, width: symbolSize.width, height: symbolSize.height)
 
-        // White arc (270°, from bottom going clockwise to the left)
-        ctx.setStrokeColor(NSColor.black.cgColor)
-        ctx.setLineWidth(2)
-        ctx.setLineCap(.round)
-        let startAngle: CGFloat = .pi * -0.25   // ~315° — start near top-right
-        let endAngle: CGFloat  = .pi *  1.25    // ~225° — end near bottom-left
-        ctx.addArc(center: center, radius: radius,
-                   startAngle: startAngle, endAngle: endAngle, clockwise: false)
-        ctx.strokePath()
+        // White outline: draw the symbol slightly offset in 8 directions
+        let outline: CGFloat = 1.0
+        let offsets: [(CGFloat, CGFloat)] = [
+            (-outline, 0), (outline, 0), (0, -outline), (0, outline),
+            (-outline, -outline), (outline, -outline), (-outline, outline), (outline, outline)
+        ]
+        symbol.lockFocus()
+        let rep = NSBitmapImageRep(focusedViewRect: NSRect(origin: .zero, size: symbolSize))
+        symbol.unlockFocus()
 
-        // Arrowhead at the end of the arc (tangent pointing "forward")
-        // At endAngle the tangent direction (counter-clockwise) is perpendicular: endAngle + π/2
-        let tipX = center.x + radius * cos(endAngle)
-        let tipY = center.y + radius * sin(endAngle)
-        let tip = CGPoint(x: tipX, y: tipY)
+        // Tint white for outline
+        if let rep = rep, let whiteImg = CIFilter(name: "CIColorMatrix", parameters: [
+            kCIInputImageKey: CIImage(bitmapImageRep: rep)!,
+            "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+            "inputBiasVector": CIVector(x: 1, y: 1, z: 1, w: 0)
+        ])?.outputImage {
+            let ciCtx = CIContext()
+            if let cg = ciCtx.createCGImage(whiteImg, from: whiteImg.extent) {
+                for (dx, dy) in offsets {
+                    ctx.saveGState()
+                    ctx.translateBy(x: dx, y: dy)
+                    ctx.draw(cg, in: drawRect)
+                    ctx.restoreGState()
+                }
+            }
+        }
 
-        // Tangent direction at end of CCW arc = endAngle + π/2
-        let tangent = endAngle + .pi / 2
-        let arrowLen: CGFloat = 5
-        let spread: CGFloat = .pi * 0.35   // half-angle of arrowhead
-
-        ctx.setFillColor(NSColor.black.cgColor)
-        ctx.beginPath()
-        ctx.move(to: tip)
-        ctx.addLine(to: CGPoint(
-            x: tip.x - arrowLen * cos(tangent - spread),
-            y: tip.y - arrowLen * sin(tangent - spread)
-        ))
-        ctx.addLine(to: CGPoint(
-            x: tip.x - arrowLen * cos(tangent + spread),
-            y: tip.y - arrowLen * sin(tangent + spread)
-        ))
-        ctx.closePath()
-        ctx.fillPath()
-
+        // Draw black symbol on top
+        symbol.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1.0)
         return true
     }
     return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
