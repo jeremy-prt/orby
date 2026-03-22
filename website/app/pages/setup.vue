@@ -17,7 +17,7 @@
           <p class="text-gray-600">{{ t('setup.step1.desc') }}</p>
           <a
             href="https://github.com/jeremy-prt/orby/releases/latest/download/Orby.dmg"
-            target="_blank"
+            
             class="inline-flex items-center gap-2 mt-3 px-5 py-2.5 bg-brand hover:bg-brand-dark text-white text-sm font-semibold rounded-xl transition-colors"
           >
             <Icon name="mdi:download" />

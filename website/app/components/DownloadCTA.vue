@@ -29,7 +29,7 @@
       <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
         <a
           href="https://github.com/jeremy-prt/orby/releases/latest/download/Orby.dmg"
-          target="_blank"
+          
           class="px-8 py-4 bg-brand hover:bg-brand-dark text-white font-semibold rounded-full shadow-lg shadow-brand/25 hover:shadow-xl hover:shadow-brand/35 transition-all text-base flex items-center gap-2 group"
         >
           {{ t('cta.download') }}

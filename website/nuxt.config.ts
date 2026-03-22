@@ -25,6 +25,7 @@ export default defineNuxtConfig({
         { property: 'og:type', content: 'website' },
       ],
       link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'icon', type: 'image/png', href: '/favicon.png' }
       ]
     }

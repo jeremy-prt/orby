@@ -14,12 +14,6 @@
           <rect width="100%" height="100%" fill="url(#dots)" />
         </svg>
 
-        <!-- Ring top-right -->
-        <svg class="absolute -top-32 -right-32 w-[350px] h-[350px] opacity-22" viewBox="0 0 350 350" fill="none">
-          <circle cx="175" cy="175" r="140" stroke="#E2B6D5" stroke-width="1" />
-          <circle cx="175" cy="175" r="90" stroke="#E2B6D5" stroke-width="0.5" />
-        </svg>
-
         <!-- Ring bottom-left -->
         <svg class="absolute -bottom-16 -left-16 w-[300px] h-[300px] opacity-20" viewBox="0 0 300 300" fill="none">
           <circle cx="150" cy="150" r="120" stroke="#E2B6D5" stroke-width="1" />
@@ -40,7 +34,7 @@
         <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
           <a
             href="https://github.com/jeremy-prt/orby/releases/latest/download/Orby.dmg"
-            target="_blank"
+            
             class="px-7 py-3.5 bg-brand hover:bg-brand-dark text-white font-semibold rounded-full shadow-lg shadow-brand/20 hover:shadow-xl hover:shadow-brand/30 transition-all text-sm"
           >
             {{ t('hero.cta') }}

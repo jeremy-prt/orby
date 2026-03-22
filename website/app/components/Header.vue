@@ -51,7 +51,7 @@
             <!-- Download button: hidden on mobile -->
             <a
                 href="https://github.com/jeremy-prt/orby/releases/latest/download/Orby.dmg"
-                target="_blank"
+                
                 class="hidden md:inline-flex ml-2 px-5 py-2 bg-brand hover:bg-brand-dark text-white text-sm font-semibold rounded-full transition-all hover:shadow-lg hover:shadow-brand/20"
             >
                 {{ t("nav.download") }}
