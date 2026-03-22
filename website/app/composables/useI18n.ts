@@ -104,8 +104,10 @@ const translations: Record<string, Record<Lang, string>> = {
   'changelog.title': { en: 'Changelog', fr: 'Historique des versions', es: 'Registro de cambios', de: 'Änderungsprotokoll' },
   'changelog.subtitle': { en: 'Latest updates and improvements.', fr: 'Dernières mises à jour et améliorations.', es: 'Últimas actualizaciones y mejoras.', de: 'Neueste Updates und Verbesserungen.' },
   'changelog.loading': { en: 'Loading releases...', fr: 'Chargement des versions...', es: 'Cargando versiones...', de: 'Versionen werden geladen...' },
-  'changelog.showMore': { en: 'Show more releases', fr: 'Afficher plus de versions', es: 'Mostrar más versiones', de: 'Weitere Versionen anzeigen' },
-  'changelog.showLess': { en: 'Show less', fr: 'Afficher moins', es: 'Mostrar menos', de: 'Weniger anzeigen' },
+  'changelog.showMore': { en: 'Read more', fr: 'Lire plus', es: 'Leer más', de: 'Mehr lesen' },
+  'changelog.showLess': { en: 'Read less', fr: 'Lire moins', es: 'Leer menos', de: 'Weniger lesen' },
+  'changelog.showAll': { en: 'See all releases', fr: 'Voir toutes les versions', es: 'Ver todas las versiones', de: 'Alle Versionen anzeigen' },
+  'changelog.hideAll': { en: 'Show less', fr: 'Réduire', es: 'Reducir', de: 'Weniger anzeigen' },
   'changelog.noReleases': { en: 'No releases found', fr: 'Aucune version trouvée', es: 'No se encontraron versiones', de: 'Keine Versionen gefunden' },
 
   // Footer
