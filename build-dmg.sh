@@ -14,7 +14,7 @@ bash build-app.sh
 # Step 1.5: Sign with stable certificate so TCC permissions persist across Sparkle updates
 # (ad-hoc signing resets Screen Recording permission on every update)
 echo "Signing for distribution..."
-codesign --force --deep -s "ScreenshotMini Dev" "$APP_BUNDLE"
+codesign --force --deep -s "Orby Dev" "$APP_BUNDLE"
 
 # Step 2: DMG background
 # Uses Resources/dmg-bg.png (drag to install arrow)
