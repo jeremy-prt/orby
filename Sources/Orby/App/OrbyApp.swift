@@ -25,7 +25,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Sparkle auto-updater
         AppDelegate.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
-        UserDefaults.standard.register(defaults: ["dismissDelay": 20.0, "playSound": true, "showMenuBarIcon": true, "appTheme": "system", "exportRetina": true])
+        // Detect system language for default
+        let sysLang = Locale.current.language.languageCode?.identifier ?? "en"
+        let defaultLang: String
+        switch sysLang {
+        case "fr": defaultLang = "fr"
+        case "es": defaultLang = "es"
+        case "de": defaultLang = "de"
+        default: defaultLang = "en"
+        }
+
+        UserDefaults.standard.register(defaults: [
+            "dismissDelay": 20.0,
+            "playSound": true,
+            "showMenuBarIcon": true,
+            "appTheme": "system",
+            "exportRetina": false,
+            "closeAfterAction": true,
+            "multiPreview": true,
+            "previewPosition": "bottomLeft",
+            "imageFormat": "png",
+            "appLanguage": defaultLang,
+            "ocrLanguage": defaultLang
+        ])
         applyTheme(UserDefaults.standard.string(forKey: "appTheme") ?? "system")
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 

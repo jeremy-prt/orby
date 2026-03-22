@@ -45,13 +45,32 @@ func saveImage(_ image: NSImage, to savePath: URL) {
     guard let tiff = exportImage.tiffRepresentation,
           let bitmap = NSBitmapImageRep(data: tiff) else { return }
     let format = UserDefaults.standard.string(forKey: "imageFormat") ?? "png"
-    let (fileType, ext): (NSBitmapImageRep.FileType, String) = switch format {
-        case "jpeg": (.jpeg, "jpg")
-        case "tiff": (.tiff, "tiff")
-        default: (.png, "png")
+    let ext: String
+    let data: Data?
+
+    switch format {
+    case "jpeg":
+        ext = "jpg"
+        data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+    case "webp":
+        ext = "webp"
+        if let cgImage = bitmap.cgImage {
+            let mutableData = NSMutableData()
+            if let dest = CGImageDestinationCreateWithData(mutableData, "public.webp" as CFString, 1, nil) {
+                CGImageDestinationAddImage(dest, cgImage, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+                CGImageDestinationFinalize(dest)
+                data = mutableData as Data
+            } else { data = bitmap.representation(using: .png, properties: [:]) }
+        } else { data = bitmap.representation(using: .png, properties: [:]) }
+    case "tiff":
+        ext = "tiff"
+        data = bitmap.representation(using: .tiff, properties: [:])
+    default:
+        ext = "png"
+        data = bitmap.representation(using: .png, properties: [:])
     }
-    let props: [NSBitmapImageRep.PropertyKey: Any] = fileType == .jpeg ? [.compressionFactor: 0.9] : [:]
-    guard let data = bitmap.representation(using: fileType, properties: props) else { return }
+
+    guard let data else { return }
     let filename = "Screenshot_\(DateFormatter.yyyyMMdd_HHmmss.string(from: Date())).\(ext)"
     let fullPath = savePath.appending(path: filename)
     try? data.write(to: fullPath)

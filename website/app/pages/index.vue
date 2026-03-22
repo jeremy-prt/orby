@@ -16,9 +16,13 @@
       :description="t('section.ocr.desc')"
     />
     <FeatureSection
+      :title="t('section.history.title')"
+      :description="t('section.history.desc')"
+      reversed
+    />
+    <FeatureSection
       :title="t('section.background.title')"
       :description="t('section.background.desc')"
-      reversed
     />
     <!-- <Shortcuts /> -->
     <ChangelogSection />

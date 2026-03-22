@@ -30,12 +30,13 @@ enum ScreenPosition: String, CaseIterable {
 // MARK: - Image format
 
 enum ImageFormat: String, CaseIterable {
-    case png, jpeg, tiff
+    case png, jpeg, webp, tiff
 
     var label: String {
         switch self {
         case .png: "PNG"
         case .jpeg: "JPEG"
+        case .webp: "WebP"
         case .tiff: "TIFF"
         }
     }
@@ -44,6 +45,7 @@ enum ImageFormat: String, CaseIterable {
         switch self {
         case .png: return L10n.tr4("Lossless, transparent", "Sans perte, transparent", "Sin pérdida, transparente", "Verlustfrei, transparent")
         case .jpeg: return L10n.tr4("Compressed, lighter", "Compressé, plus léger", "Comprimido, más ligero", "Komprimiert, leichter")
+        case .webp: return L10n.tr4("Modern, lightweight", "Moderne, léger", "Moderno, ligero", "Modern, leicht")
         case .tiff: return L10n.tr4("Lossless, high quality", "Sans perte, haute qualité", "Sin pérdida, alta calidad", "Verlustfrei, hohe Qualität")
         }
     }

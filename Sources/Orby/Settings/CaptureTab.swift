@@ -9,7 +9,7 @@ struct CaptureTabView: View {
     @AppStorage("afterCaptureCopyClipboard") private var afterCaptureCopyClipboard = true
     @AppStorage("afterCaptureSave") private var afterCaptureSave = false
     @AppStorage("afterCaptureOpenEditor") private var afterCaptureOpenEditor = false
-    @AppStorage("exportRetina") private var exportRetina = true
+    @AppStorage("exportRetina") private var exportRetina = false
 
     var body: some View {
         let en = L10n.lang == "en"

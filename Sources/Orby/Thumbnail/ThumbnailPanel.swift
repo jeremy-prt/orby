@@ -461,23 +461,37 @@ class ThumbnailPanel {
               let bitmap = NSBitmapImageRep(data: tiff) else { return }
 
         let format = UserDefaults.standard.string(forKey: "imageFormat") ?? "png"
-        let fileType: NSBitmapImageRep.FileType
         let ext: String
+        let data: Data?
 
         switch format {
         case "jpeg":
-            fileType = .jpeg; ext = "jpg"
+            ext = "jpg"
+            data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+        case "webp":
+            ext = "webp"
+            // Use CGImageDestination for WebP (macOS 14+)
+            if let cgImage = bitmap.cgImage {
+                let mutableData = NSMutableData()
+                if let dest = CGImageDestinationCreateWithData(mutableData, "public.webp" as CFString, 1, nil) {
+                    CGImageDestinationAddImage(dest, cgImage, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+                    CGImageDestinationFinalize(dest)
+                    data = mutableData as Data
+                } else {
+                    data = bitmap.representation(using: .png, properties: [:])
+                }
+            } else {
+                data = bitmap.representation(using: .png, properties: [:])
+            }
         case "tiff":
-            fileType = .tiff; ext = "tiff"
+            ext = "tiff"
+            data = bitmap.representation(using: .tiff, properties: [:])
         default:
-            fileType = .png; ext = "png"
+            ext = "png"
+            data = bitmap.representation(using: .png, properties: [:])
         }
 
-        let properties: [NSBitmapImageRep.PropertyKey: Any] = fileType == .jpeg
-            ? [.compressionFactor: 0.9]
-            : [:]
-
-        guard let data = bitmap.representation(using: fileType, properties: properties) else { return }
+        guard let data else { return }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
