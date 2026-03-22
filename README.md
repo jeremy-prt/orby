@@ -1,7 +1,7 @@
 # Orby
 
 <p align="center">
-  <img src="Resources/screenshot.jpeg" width="600" alt="Orby">
+  <img src="Resources/screenshot.png" width="600" alt="Orby">
 </p>
 
 <p align="center">

@@ -53,17 +53,8 @@
     <!-- Mockup: pins when visible (desktop only), scroll scales -->
     <section ref="mockupSection" class="relative flex items-center justify-center py-10 md:py-20 px-6 md:min-h-[80vh]">
       <div class="max-w-3xl w-full mx-auto">
-        <div ref="mockup" class="rounded-2xl overflow-hidden shadow-2xl shadow-black/15 border border-gray-200/50 bg-gray-100 will-change-transform origin-center">
-          <!-- macOS title bar -->
-          <div class="flex items-center gap-2 px-4 py-3 bg-brand-overlay/20">
-            <span class="w-3 h-3 rounded-full bg-[#ff5f57]" />
-            <span class="w-3 h-3 rounded-full bg-[#febd2e]" />
-            <span class="w-3 h-3 rounded-full bg-[#28c840]" />
-          </div>
-          <!-- Placeholder — replace with video when ready -->
-          <div class="w-full aspect-video bg-brand-overlay/20 flex items-center justify-center">
-            <Icon name="mdi:play-circle-outline" class="text-5xl text-brand/20" />
-          </div>
+        <div ref="mockup" class="will-change-transform origin-center">
+          <img src="/hero.svg" alt="Orby editor" class="w-full h-auto" />
         </div>
       </div>
     </section>
@@ -87,12 +78,12 @@ onMounted(() => {
   // No pin/scale on mobile — just show the mockup normally
   if (!isMobile) {
     gsap.to(mockup.value, {
-      scale: 1.3,
+      scale: 1.45,
       ease: 'power1.inOut',
       scrollTrigger: {
         trigger: mockupSection.value,
-        start: 'center center',
-        end: '+=80%',
+        start: 'top 15%',
+        end: '+=90%',
         scrub: true,
         pin: true,
         anticipatePin: 1,
