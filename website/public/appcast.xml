@@ -3,6 +3,32 @@
     <channel>
         <title>Orby Updates</title>
         <language>en</language>
-        <!-- Add new <item> entries here when releasing updates -->
+        <item>
+            <title>Version 1.0.0</title>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <h2>Orby 1.0.0</h2>
+                <ul>
+                    <li>Full screen, area, window and OCR capture</li>
+                    <li>Floating preview with pin, drag & drop, auto-dismiss</li>
+                    <li>Editor with 11 tools: arrows, text, blur, shapes, freehand, numbered steps, backgrounds</li>
+                    <li>Multi-selection of annotations (Shift/Cmd+click)</li>
+                    <li>Background tool: gradients, solid colors, padding, corners, shadow</li>
+                    <li>Capture history with thumbnail grid</li>
+                    <li>4 languages: French, English, Spanish, German</li>
+                    <li>System/Light/Dark themes</li>
+                    <li>Auto-update via Sparkle</li>
+                </ul>
+            ]]></description>
+            <pubDate>Sat, 22 Mar 2026 14:00:00 +0100</pubDate>
+            <enclosure
+                url="https://github.com/jeremy-prt/orby/releases/download/v1.0.0/Orby.dmg"
+                sparkle:edSignature="AuwHJ++JhKcSTiY86vdwdBbm1j+o/PlbN7BL1mKP2ro77aFE9YHNGVuSr28NrSi0KGaDlXMvaRKg3/arDeXzBw=="
+                length="3060246"
+                type="application/octet-stream"
+            />
+        </item>
     </channel>
 </rss>
