@@ -13,7 +13,7 @@ class ScreenCaptureService {
     }
 
     func captureWindow() async {
-        await capture(arguments: ["-x", "-w"])
+        await capture(arguments: ["-x", "-w", "-o"])
     }
 
     func captureOCR() async {
