@@ -7,11 +7,16 @@ struct AnnotationView: View {
     let annotation: Annotation
     var canvasSize: CGSize = .zero
     var zoomLevel: CGFloat = 1.0
+    var canvasOffset: CGPoint = .zero
 
     private var rotationAnchor: UnitPoint {
         guard canvasSize.width > 0 && canvasSize.height > 0 else { return .center }
         let r = annotation.boundingRect
-        return UnitPoint(x: r.midX / canvasSize.width, y: r.midY / canvasSize.height)
+        return UnitPoint(x: (r.midX + canvasOffset.x) / canvasSize.width, y: (r.midY + canvasOffset.y) / canvasSize.height)
+    }
+
+    private func z(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: (point.x + canvasOffset.x) * zoomLevel, y: (point.y + canvasOffset.y) * zoomLevel)
     }
 
     var body: some View {
@@ -32,8 +37,8 @@ struct AnnotationView: View {
                 if annotation.shape == .freehand {
                     drawFreehand(ctx: ctx)
                 } else {
-                    let s = CGPoint(x: annotation.start.x * zoomLevel, y: annotation.start.y * zoomLevel)
-                    let e = CGPoint(x: annotation.end.x * zoomLevel, y: annotation.end.y * zoomLevel)
+                    let s = z(annotation.start)
+                    let e = z(annotation.end)
                     if annotation.shape == .arrow {
                         drawArrow(ctx: ctx, from: s, to: e)
                     } else {
@@ -57,7 +62,7 @@ struct AnnotationView: View {
     @ViewBuilder
     private var blurPreview: some View {
         let rect = annotation.boundingRect
-        let rectZoomed = CGRect(x: rect.minX * zoomLevel, y: rect.minY * zoomLevel,
+        let rectZoomed = CGRect(x: (rect.minX + canvasOffset.x) * zoomLevel, y: (rect.minY + canvasOffset.y) * zoomLevel,
                                 width: rect.width * zoomLevel, height: rect.height * zoomLevel)
         ZStack {
             switch annotation.blurStyle {
@@ -138,8 +143,8 @@ struct AnnotationView: View {
                     .padding(.vertical, 4)
             }
             .fixedSize()
-            .position(x: annotation.start.x * zoomLevel + rect.width * zoomLevel / 2,
-                      y: annotation.start.y * zoomLevel + rect.height * zoomLevel / 2)
+            .position(x: (annotation.start.x + canvasOffset.x) * zoomLevel + rect.width * zoomLevel / 2,
+                      y: (annotation.start.y + canvasOffset.y) * zoomLevel + rect.height * zoomLevel / 2)
             .allowsHitTesting(false)
         }
     }
@@ -157,7 +162,7 @@ struct AnnotationView: View {
                 .font(.system(size: annotation.fontSize * 0.75 * zoomLevel, weight: .bold))
                 .foregroundStyle(textColor)
         }
-        .position(x: annotation.start.x * zoomLevel + size / 2, y: annotation.start.y * zoomLevel + size / 2)
+        .position(x: (annotation.start.x + canvasOffset.x) * zoomLevel + size / 2, y: (annotation.start.y + canvasOffset.y) * zoomLevel + size / 2)
         .allowsHitTesting(false)
     }
 
@@ -173,19 +178,19 @@ struct AnnotationView: View {
     private func drawFreehand(ctx: GraphicsContext) {
         guard annotation.points.count >= 2 else { return }
         var p = Path()
-        let firstPt = CGPoint(x: annotation.points[0].x * zoomLevel, y: annotation.points[0].y * zoomLevel)
+        let firstPt = z(annotation.points[0])
         p.move(to: firstPt)
         if annotation.points.count == 2 {
-            let secondPt = CGPoint(x: annotation.points[1].x * zoomLevel, y: annotation.points[1].y * zoomLevel)
+            let secondPt = z(annotation.points[1])
             p.addLine(to: secondPt)
         } else {
             for i in 1..<annotation.points.count {
-                let prevPt = CGPoint(x: annotation.points[i - 1].x * zoomLevel, y: annotation.points[i - 1].y * zoomLevel)
-                let currPt = CGPoint(x: annotation.points[i].x * zoomLevel, y: annotation.points[i].y * zoomLevel)
+                let prevPt = z(annotation.points[i - 1])
+                let currPt = z(annotation.points[i])
                 let mid = CGPoint(x: (prevPt.x + currPt.x) / 2, y: (prevPt.y + currPt.y) / 2)
                 p.addQuadCurve(to: mid, control: prevPt)
             }
-            let lastPt = CGPoint(x: annotation.points.last!.x * zoomLevel, y: annotation.points.last!.y * zoomLevel)
+            let lastPt = z(annotation.points.last!)
             p.addLine(to: lastPt)
         }
         ctx.stroke(p, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
@@ -212,29 +217,29 @@ struct AnnotationView: View {
 
     private func drawArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint) {
         let cp = annotation.controlPoint
+        let cpz = cp.map { z($0) }
 
         let angle: CGFloat
-        if let cp = cp { angle = atan2(e.y - cp.y, e.x - cp.x) }
+        if let cpz = cpz { angle = atan2(e.y - cpz.y, e.x - cpz.x) }
         else { angle = atan2(e.y - s.y, e.x - s.x) }
 
         let startAngle: CGFloat
-        if let cp = cp { startAngle = atan2(s.y - cp.y, s.x - cp.x) }
+        if let cpz = cpz { startAngle = atan2(s.y - cpz.y, s.x - cpz.x) }
         else { startAngle = atan2(s.y - e.y, s.x - e.x) }
 
         switch annotation.arrowStyle {
-        case .thin:    drawThinArrow(ctx: ctx, from: s, to: e, cp: cp, angle: angle)
-        case .outline: drawOutlineArrow(ctx: ctx, from: s, to: e, cp: cp, angle: angle)
-        case .filled:  drawFilledArrow(ctx: ctx, from: s, to: e, cp: cp, angle: angle, hasCurve: cp != nil)
-        case .double:  drawDoubleArrow(ctx: ctx, from: s, to: e, cp: cp, endAngle: angle, startAngle: startAngle)
+        case .thin:    drawThinArrow(ctx: ctx, from: s, to: e, cpz: cpz, angle: angle)
+        case .outline: drawOutlineArrow(ctx: ctx, from: s, to: e, cpz: cpz, angle: angle)
+        case .filled:  drawFilledArrow(ctx: ctx, from: s, to: e, cpz: cpz, angle: angle, hasCurve: cpz != nil)
+        case .double:  drawDoubleArrow(ctx: ctx, from: s, to: e, cpz: cpz, endAngle: angle, startAngle: startAngle)
         }
     }
 
-    private func drawThinArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, angle: CGFloat) {
+    private func drawThinArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cpz: CGPoint?, angle: CGFloat) {
         var shaft = Path()
         shaft.move(to: s)
-        if let cp = cp {
-            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
-            shaft.addQuadCurve(to: e, control: cpZoomed)
+        if let cpz = cpz {
+            shaft.addQuadCurve(to: e, control: cpz)
         } else {
             shaft.addLine(to: e)
         }
@@ -249,7 +254,7 @@ struct AnnotationView: View {
         ctx.stroke(head, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
     }
 
-    private func drawOutlineArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, angle: CGFloat) {
+    private func drawOutlineArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cpz: CGPoint?, angle: CGFloat) {
         let hl: CGFloat = 20 * zoomLevel, ha: CGFloat = .pi / 6
         let left = CGPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha))
         let right = CGPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha))
@@ -261,28 +266,26 @@ struct AnnotationView: View {
 
         var shaft = Path()
         shaft.move(to: s)
-        if let cp = cp {
-            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
-            shaft.addQuadCurve(to: baseCenter, control: cpZoomed)
+        if let cpz = cpz {
+            shaft.addQuadCurve(to: baseCenter, control: cpz)
         } else {
             shaft.addLine(to: baseCenter)
         }
         ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
     }
 
-    private func drawFilledArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, angle: CGFloat, hasCurve: Bool) {
+    private func drawFilledArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cpz: CGPoint?, angle: CGFloat, hasCurve: Bool) {
         let shaftWidth = annotation.lineWidth * 3 * zoomLevel
         let headLength: CGFloat = max(shaftWidth * 3, 30 * zoomLevel)
         let headWidth: CGFloat = max(shaftWidth * 2.5, 25 * zoomLevel)
         let totalLength = hypot(e.x - s.x, e.y - s.y)
         guard totalLength > 1 else { return }
 
-        if hasCurve, let cp = cp {
-            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
+        if hasCurve, let cpz = cpz {
             let headRatio = min(headLength / totalLength, 0.5)
             let shaftEndT = max(0, 1.0 - headRatio)
-            let shaftEnd = bezierPoint(t: shaftEndT, from: s, control: cpZoomed, to: e)
-            let perpHead = bezierTangentAngle(t: 1.0, from: s, control: cpZoomed, to: e) + .pi / 2
+            let shaftEnd = bezierPoint(t: shaftEndT, from: s, control: cpz, to: e)
+            let perpHead = bezierTangentAngle(t: 1.0, from: s, control: cpz, to: e) + .pi / 2
             let leftHead = CGPoint(x: shaftEnd.x + headWidth * cos(perpHead), y: shaftEnd.y + headWidth * sin(perpHead))
             let rightHead = CGPoint(x: shaftEnd.x - headWidth * cos(perpHead), y: shaftEnd.y - headWidth * sin(perpHead))
 
@@ -290,8 +293,8 @@ struct AnnotationView: View {
             var leftPoints: [CGPoint] = [], rightPoints: [CGPoint] = []
             for i in 0...steps {
                 let t = CGFloat(i) / CGFloat(steps) * shaftEndT
-                let pt = bezierPoint(t: t, from: s, control: cpZoomed, to: e)
-                let tang = bezierTangentAngle(t: t, from: s, control: cpZoomed, to: e)
+                let pt = bezierPoint(t: t, from: s, control: cpz, to: e)
+                let tang = bezierTangentAngle(t: t, from: s, control: cpz, to: e)
                 let perp = tang + .pi / 2
                 let halfW = shaftWidth / 2
                 leftPoints.append(CGPoint(x: pt.x + halfW * cos(perp), y: pt.y + halfW * sin(perp)))
@@ -323,12 +326,11 @@ struct AnnotationView: View {
         }
     }
 
-    private func drawDoubleArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, endAngle: CGFloat, startAngle: CGFloat) {
+    private func drawDoubleArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cpz: CGPoint?, endAngle: CGFloat, startAngle: CGFloat) {
         var shaft = Path()
         shaft.move(to: s)
-        if let cp = cp {
-            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
-            shaft.addQuadCurve(to: e, control: cpZoomed)
+        if let cpz = cpz {
+            shaft.addQuadCurve(to: e, control: cpz)
         } else {
             shaft.addLine(to: e)
         }

@@ -68,12 +68,13 @@ struct TextEditingOverlay: View {
     let annotation: Annotation
     var canvasSize: CGSize = .zero
     var zoomLevel: CGFloat = 1.0
+    var canvasOffset: CGPoint = .zero
     let onCommit: () -> Void
 
     private var rotationAnchor: UnitPoint {
         guard canvasSize.width > 0 && canvasSize.height > 0 else { return .center }
         let r = annotation.boundingRect
-        return UnitPoint(x: r.midX / canvasSize.width, y: r.midY / canvasSize.height)
+        return UnitPoint(x: (r.midX + canvasOffset.x) / canvasSize.width, y: (r.midY + canvasOffset.y) / canvasSize.height)
     }
 
     private var liveWidth: CGFloat {
@@ -114,8 +115,8 @@ struct TextEditingOverlay: View {
                 .padding(.vertical, 4)
             }
             .frame(width: editW, height: editH)
-            .position(x: annotation.start.x * zoomLevel + editW / 2,
-                      y: annotation.start.y * zoomLevel + editH / 2)
+            .position(x: (annotation.start.x + canvasOffset.x) * zoomLevel + editW / 2,
+                      y: (annotation.start.y + canvasOffset.y) * zoomLevel + editH / 2)
         }
         .scaleEffect(zoomLevel, anchor: rotationAnchor)
         .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)

@@ -42,10 +42,11 @@ struct CropMask: Shape {
     let rect: CGRect
     let size: CGSize
     var zoomLevel: CGFloat = 1.0
+    var canvasOffset: CGPoint = .zero
 
     func path(in frame: CGRect) -> Path {
         let zoomedSize = CGSize(width: size.width * zoomLevel, height: size.height * zoomLevel)
-        let zoomedRect = CGRect(x: rect.minX * zoomLevel, y: rect.minY * zoomLevel,
+        let zoomedRect = CGRect(x: (rect.minX + canvasOffset.x) * zoomLevel, y: (rect.minY + canvasOffset.y) * zoomLevel,
                                 width: rect.width * zoomLevel, height: rect.height * zoomLevel)
         var p = Path()
         p.addRect(CGRect(origin: .zero, size: zoomedSize))

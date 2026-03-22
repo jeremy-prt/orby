@@ -7,11 +7,12 @@ struct BlurRegionView: View {
     let image: NSImage
     let canvasSize: CGSize
     var zoomLevel: CGFloat = 1.0
+    var canvasOffset: CGPoint = .zero
 
     private var rotationAnchor: UnitPoint {
         guard canvasSize.width > 0 && canvasSize.height > 0 else { return .center }
         let r = annotation.boundingRect
-        return UnitPoint(x: r.midX / canvasSize.width, y: r.midY / canvasSize.height)
+        return UnitPoint(x: (r.midX + canvasOffset.x) / canvasSize.width, y: (r.midY + canvasOffset.y) / canvasSize.height)
     }
 
     var body: some View {
@@ -19,7 +20,7 @@ struct BlurRegionView: View {
         guard rect.width > 2 && rect.height > 2 else { return AnyView(EmptyView()) }
 
         let blurredImage = createBlurredRegion()
-        let rectZoomed = CGRect(x: rect.minX * zoomLevel, y: rect.minY * zoomLevel,
+        let rectZoomed = CGRect(x: (rect.minX + canvasOffset.x) * zoomLevel, y: (rect.minY + canvasOffset.y) * zoomLevel,
                                 width: rect.width * zoomLevel, height: rect.height * zoomLevel)
         return AnyView(
             Group {
