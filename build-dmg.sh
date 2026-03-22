@@ -11,9 +11,10 @@ BG_IMAGE="Resources/dmg-bg.png"
 echo "Building app..."
 bash build-app.sh
 
-# Step 1.5: Re-sign with ad-hoc for distribution (users don't have our dev certificate)
-echo "Re-signing for distribution (ad-hoc)..."
-codesign --force --deep -s - "$APP_BUNDLE"
+# Step 1.5: Sign with stable certificate so TCC permissions persist across Sparkle updates
+# (ad-hoc signing resets Screen Recording permission on every update)
+echo "Signing for distribution..."
+codesign --force --deep -s "ScreenshotMini Dev" "$APP_BUNDLE"
 
 # Step 2: DMG background
 # Uses Resources/dmg-bg.png (drag to install arrow)
