@@ -384,6 +384,7 @@ enum CanvasInteraction {
     case none
     case drawing(Annotation)
     case moving(UUID, CGPoint)
+    case movingMultiple(Set<UUID>, CGPoint)
     case resizing(UUID, ResizeHandle)
     case freehand([CGPoint])
     case rotating(UUID)

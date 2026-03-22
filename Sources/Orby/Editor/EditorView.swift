@@ -70,7 +70,7 @@ struct EditorView: View {
     @StateObject private var history = AnnotationHistory()
 
     // Selection & hover
-    @State private var selectedId: UUID? = nil
+    @State private var selectedIds: Set<UUID> = []
     @State private var hoveredId: UUID? = nil
     @State private var interaction: CanvasInteraction = .none
 
@@ -113,9 +113,12 @@ struct EditorView: View {
     // Background
     @State private var bgConfig = BackgroundConfig()
 
+    private var selectedAnnotations: [Annotation] {
+        history.annotations.filter { selectedIds.contains($0.id) }
+    }
+
     private var selectedAnnotation: Annotation? {
-        guard let id = selectedId else { return nil }
-        return history.annotations.first { $0.id == id }
+        selectedAnnotations.first
     }
 
     private var activeShapeTool: AnnotationShape? {
@@ -161,15 +164,15 @@ struct EditorView: View {
                     .keyboardShortcut("z", modifiers: .command).hidden()
                 Button("") { history.redo(); syncSelection() }
                     .keyboardShortcut("z", modifiers: [.command, .shift]).hidden()
-                Button("") { deleteSelected() }
+                Button("") { deleteSelectedAnnotations() }
                     .keyboardShortcut(.delete, modifiers: []).hidden()
-                Button("") { moveSelected(dx: 0, dy: -1) }
+                Button("") { if editingTextId == nil { moveSelectedAnnotations(dx: 0, dy: -1) } }
                     .keyboardShortcut(.upArrow, modifiers: []).hidden()
-                Button("") { moveSelected(dx: 0, dy: 1) }
+                Button("") { if editingTextId == nil { moveSelectedAnnotations(dx: 0, dy: 1) } }
                     .keyboardShortcut(.downArrow, modifiers: []).hidden()
-                Button("") { moveSelected(dx: -1, dy: 0) }
+                Button("") { if editingTextId == nil { moveSelectedAnnotations(dx: -1, dy: 0) } }
                     .keyboardShortcut(.leftArrow, modifiers: []).hidden()
-                Button("") { moveSelected(dx: 1, dy: 0) }
+                Button("") { if editingTextId == nil { moveSelectedAnnotations(dx: 1, dy: 0) } }
                     .keyboardShortcut(.rightArrow, modifiers: []).hidden()
                 // Tool shortcuts
                 Button("") { selectTool("cursor") }.keyboardShortcut("v", modifiers: []).hidden()
@@ -339,7 +342,7 @@ struct EditorView: View {
                             }
                         }.frame(width: dw, height: dh)
 
-                        if let hId = hoveredId, hId != selectedId,
+                        if let hId = hoveredId, !selectedIds.contains(hId),
                            let hAnn = history.annotations.first(where: { $0.id == hId }) {
                             HoverOverlay(annotation: hAnn, canvasSize: CGSize(width: dw, height: dh))
                                 .frame(width: dw, height: dh)
@@ -372,10 +375,12 @@ struct EditorView: View {
                             .frame(width: dw, height: dh)
                         }
 
-                        if let sel = selectedAnnotation, editingTextId != sel.id {
-                            SelectionOverlay(annotation: sel,
-                                             canvasSize: CGSize(width: dw, height: dh))
-                                .frame(width: dw, height: dh)
+                        ForEach(selectedAnnotations, id: \.id) { sel in
+                            if editingTextId != sel.id {
+                                SelectionOverlay(annotation: sel,
+                                                 canvasSize: CGSize(width: dw, height: dh))
+                                    .frame(width: dw, height: dh)
+                            }
                         }
 
                         if selectedTool == "crop", let s = cropStart, let e = cropEnd {
@@ -450,8 +455,8 @@ struct EditorView: View {
                     onChangeTextBackground: { v in setAnnotationTextBackground(v); textHasBackground = v },
                     onChangeBlurRadius: { r in setAnnotationBlurRadius(r); blurRadius = r },
                     onChangeBlurStyle: { s in setAnnotationBlurStyle(s); blurStyle = s },
-                    onDeselect: { selectedId = nil; selectedTool = "cursor" },
-                    onDelete: { deleteSelected() }
+                    onDeselect: { selectedIds = []; selectedTool = "cursor" },
+                    onDelete: { deleteSelectedAnnotations() }
                 )
                 .padding(8)
             }
@@ -482,55 +487,72 @@ struct EditorView: View {
                 cropStart = start; cropEnd = current; return
             }
 
-            // Priority 1: Resize/rotation handle of selected annotation
-            if let id = selectedId,
-               let ann = history.annotations.first(where: { $0.id == id }),
+            // Priority 1: Resize/rotation handle of selected annotation (only first selected)
+            if let firstSelectedId = selectedIds.first,
+               let ann = history.annotations.first(where: { $0.id == firstSelectedId }),
                let handle = ann.handleAt(start) {
                 history.save()
                 if handle == .rotating {
-                    interaction = .rotating(id)
+                    interaction = .rotating(firstSelectedId)
                 } else {
-                    interaction = .resizing(id, handle)
+                    interaction = .resizing(firstSelectedId, handle)
                 }
             }
-            // Priority 2: Move the selected annotation if clicking on it
-            else if let id = selectedId,
-                    let ann = history.annotations.first(where: { $0.id == id }),
-                    ann.hitTest(start) {
+            // Priority 2: Move selected annotations if clicking on one of them
+            else if let hit = history.annotations.last(where: { selectedIds.contains($0.id) && $0.hitTest(start) }) {
                 history.save()
-                // Option-drag: duplicate the annotation and move the copy
+                // Option-drag: duplicate all selected annotations and move the copies
                 if NSEvent.modifierFlags.contains(.option) {
-                    let copy = ann.duplicate()
-                    history.annotations.append(copy)
-                    selectedId = copy.id
-                    interaction = .moving(copy.id, start)
+                    let copies = selectedIds.compactMap { id in
+                        history.annotations.first(where: { $0.id == id })?.duplicate()
+                    }
+                    for copy in copies {
+                        history.annotations.append(copy)
+                    }
+                    selectedIds = Set(copies.map(\.id))
+                    interaction = .movingMultiple(selectedIds, start)
                 } else {
-                    interaction = .moving(id, start)
+                    interaction = .movingMultiple(selectedIds, start)
                 }
             }
             // Priority 3: Select + move another annotation if clicking on it (no tool required)
             else if let hit = history.annotations.last(where: { $0.hitTest(start) }),
                     activeShapeTool == nil {
                 history.save()
-                // Option-drag: duplicate the annotation and move the copy
-                if NSEvent.modifierFlags.contains(.option) {
-                    let copy = hit.duplicate()
-                    history.annotations.append(copy)
-                    selectedId = copy.id
-                    interaction = .moving(copy.id, start)
+                // Modifier: add/remove from selection
+                let hasShiftOrCmd = NSEvent.modifierFlags.contains(.shift) || NSEvent.modifierFlags.contains(.command)
+                if hasShiftOrCmd {
+                    if selectedIds.contains(hit.id) {
+                        selectedIds.remove(hit.id)
+                    } else {
+                        selectedIds.insert(hit.id)
+                    }
                 } else {
-                    selectedId = hit.id
-                    interaction = .moving(hit.id, start)
+                    selectedIds = [hit.id]
+                }
+
+                // Option-drag: duplicate all selected annotations and move the copies
+                if NSEvent.modifierFlags.contains(.option) {
+                    let copies = selectedIds.compactMap { id in
+                        history.annotations.first(where: { $0.id == id })?.duplicate()
+                    }
+                    for copy in copies {
+                        history.annotations.append(copy)
+                    }
+                    selectedIds = Set(copies.map(\.id))
+                    interaction = .movingMultiple(selectedIds, start)
+                } else {
+                    interaction = .movingMultiple(selectedIds, start)
                 }
             }
             // Priority 4: Draw new shape if tool is active
             else if selectedTool == "draw" {
-                selectedId = nil
+                selectedIds = []
                 commitTextIfNeeded()
                 interaction = .freehand([start, current])
             }
             else if let shape = activeShapeTool, shape != .text {
-                selectedId = nil
+                selectedIds = []
                 commitTextIfNeeded()
                 interaction = .drawing(Annotation(shape: shape, start: start, end: current,
                                                   color: annotationColor, lineWidth: annotationLineWidth,
@@ -540,7 +562,7 @@ struct EditorView: View {
             }
             // Priority 5: Deselect if clicking on nothing
             else {
-                selectedId = nil
+                selectedIds = []
             }
         }
 
@@ -558,6 +580,14 @@ struct EditorView: View {
                 history.annotations[idx].move(by: CGSize(width: dx, height: dy))
                 interaction = .moving(id, current)
             }
+        case .movingMultiple(let ids, let lastPt):
+            let dx = current.x - lastPt.x, dy = current.y - lastPt.y
+            for id in ids {
+                if let idx = history.annotations.firstIndex(where: { $0.id == id }) {
+                    history.annotations[idx].move(by: CGSize(width: dx, height: dy))
+                }
+            }
+            interaction = .movingMultiple(ids, current)
         case .resizing(let id, let handle):
             if let idx = history.annotations.firstIndex(where: { $0.id == id }) {
                 history.annotations[idx].resize(handle: handle, to: current)
@@ -581,7 +611,7 @@ struct EditorView: View {
             if dist > 5 {
                 history.save()
                 history.annotations.append(ann)
-                selectedId = ann.id
+                selectedIds = [ann.id]
             }
         case .freehand(let pts):
             if pts.count >= 3 {
@@ -593,9 +623,9 @@ struct EditorView: View {
                                      points: pts)
                 history.save()
                 history.annotations.append(ann)
-                selectedId = ann.id
+                selectedIds = [ann.id]
             }
-        case .moving, .resizing, .rotating:
+        case .moving, .movingMultiple, .resizing, .rotating:
             break
         case .none:
             break
@@ -612,9 +642,9 @@ struct EditorView: View {
             selectedTool = "cursor"
             // Check if we clicked on an annotation
             if let hit = history.annotations.last(where: { $0.hitTest(pt) }) {
-                selectedId = hit.id
+                selectedIds = [hit.id]
             } else {
-                selectedId = nil
+                selectedIds = []
             }
             return
         }
@@ -626,7 +656,7 @@ struct EditorView: View {
                                  textHasBackground: textHasBackground)
             history.save()
             history.annotations.append(ann)
-            selectedId = ann.id
+            selectedIds = [ann.id]
             editingTextId = ann.id
             editingText = ""
             return
@@ -641,7 +671,7 @@ struct EditorView: View {
                                  text: "\(nextNumber)", fontSize: fontSize)
             history.save()
             history.annotations.append(ann)
-            selectedId = ann.id
+            selectedIds = [ann.id]
             nextNumber += 1
             return
         }
@@ -651,16 +681,27 @@ struct EditorView: View {
         // Try to select an annotation under the click
         if let hit = history.annotations.last(where: { $0.hitTest(pt) }) {
             // If clicking on an already-selected text → enter edit mode
-            if hit.id == selectedId && hit.shape == .text && editingTextId == nil {
+            if selectedIds.contains(hit.id) && hit.shape == .text && editingTextId == nil {
                 editingTextId = hit.id
                 editingText = hit.text
                 return
             }
-            selectedId = hit.id
+
+            // Modifier: add/remove from selection
+            let hasShiftOrCmd = NSEvent.modifierFlags.contains(.shift) || NSEvent.modifierFlags.contains(.command)
+            if hasShiftOrCmd {
+                if selectedIds.contains(hit.id) {
+                    selectedIds.remove(hit.id)
+                } else {
+                    selectedIds.insert(hit.id)
+                }
+            } else {
+                selectedIds = [hit.id]
+            }
             selectedTool = "cursor"
         } else if selectedTool != "crop" {
             // Clicked on empty space → switch to cursor tool
-            selectedId = nil
+            selectedIds = []
             selectedTool = "cursor"
         }
     }
@@ -770,7 +811,7 @@ struct EditorView: View {
     private func selectTool(_ tool: String?) {
         if editingTextId != nil { commitTextIfNeeded() }
         if tool == selectedTool { selectedTool = nil } else { selectedTool = tool }
-        selectedId = nil; cropStart = nil; cropEnd = nil; interaction = .none
+        selectedIds = []; cropStart = nil; cropEnd = nil; interaction = .none
     }
 
     private func cancelTool() {
@@ -844,16 +885,15 @@ struct EditorView: View {
         }
     }
 
-    private func deleteSelected() {
-        guard let id = selectedId else { return }
+    private func deleteSelectedAnnotations() {
+        guard !selectedIds.isEmpty else { return }
         history.save()
-        history.annotations.removeAll { $0.id == id }
-        selectedId = nil
+        history.annotations.removeAll { selectedIds.contains($0.id) }
+        selectedIds = []
     }
 
     private func copySelectedAnnotation() {
-        guard let id = selectedId,
-              let ann = history.annotations.first(where: { $0.id == id }) else { return }
+        guard let ann = selectedAnnotation else { return }
         clipboard = ann
     }
 
@@ -862,7 +902,7 @@ struct EditorView: View {
         let pasted = source.duplicate(offset: CGSize(width: 20, height: 20))
         history.save()
         history.annotations.append(pasted)
-        selectedId = pasted.id
+        selectedIds = [pasted.id]
         // Update clipboard to the pasted copy so successive pastes cascade
         clipboard = pasted
     }
@@ -878,9 +918,9 @@ struct EditorView: View {
             return
         }
 
-        // Check resize/rotation handles on selected annotation
-        if let id = selectedId,
-           let ann = history.annotations.first(where: { $0.id == id }),
+        // Check resize/rotation handles on first selected annotation
+        if let firstSelectedId = selectedIds.first,
+           let ann = history.annotations.first(where: { $0.id == firstSelectedId }),
            let handle = ann.handleAt(point) {
             if handle == .rotating {
                 rotateCursor.set()
@@ -899,21 +939,24 @@ struct EditorView: View {
         NSCursor.arrow.set()
     }
 
-    private func moveSelected(dx: CGFloat, dy: CGFloat) {
-        guard let id = selectedId,
-              let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+    private func moveSelectedAnnotations(dx: CGFloat, dy: CGFloat) {
+        guard !selectedIds.isEmpty else { return }
         history.save()
-        history.annotations[idx].move(by: CGSize(width: dx, height: dy))
+        for id in selectedIds {
+            if let idx = history.annotations.firstIndex(where: { $0.id == id }) {
+                history.annotations[idx].move(by: CGSize(width: dx, height: dy))
+            }
+        }
     }
 
     private func syncSelection() {
-        if let id = selectedId, !history.annotations.contains(where: { $0.id == id }) {
-            selectedId = nil
+        selectedIds = selectedIds.filter { id in
+            history.annotations.contains(where: { $0.id == id })
         }
     }
 
     private var showPropertiesToolbar: Bool {
-        if selectedId != nil { return true }
+        if !selectedIds.isEmpty { return true }
         if let tool = selectedTool, tool != "crop" && tool != "cursor" && tool != "background" { return true }
         return false
     }
@@ -940,7 +983,7 @@ struct EditorView: View {
         guard let id = editingTextId else { return }
         if editingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             history.annotations.removeAll { $0.id == id }
-            selectedId = nil
+            selectedIds = []
         } else if let idx = history.annotations.firstIndex(where: { $0.id == id }) {
             history.annotations[idx].text = editingText
         }
@@ -956,14 +999,14 @@ struct EditorView: View {
     private func setAnnotationColor(_ color: Color) {
         annotationColor = color
         UserDefaults.standard.set(color.toHex(), forKey: "lastAnnotationColor")
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].color = color
     }
 
     private func setAnnotationLineWidth(_ width: CGFloat) {
         annotationLineWidth = width
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].lineWidth = width
     }
@@ -977,7 +1020,7 @@ struct EditorView: View {
         case .solidFilled:
             annotationFilled = true; annotationSolidFill = true
         }
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].filled = annotationFilled
         history.annotations[idx].solidFill = annotationSolidFill
@@ -985,35 +1028,35 @@ struct EditorView: View {
 
     private func setAnnotationFontSize(_ size: CGFloat) {
         fontSize = size
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].fontSize = size
     }
 
     private func setAnnotationArrowStyle(_ style: ArrowStyle) {
         arrowStyle = style
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].arrowStyle = style
     }
 
     private func setAnnotationTextBackground(_ value: Bool) {
         textHasBackground = value
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].textHasBackground = value
     }
 
     private func setAnnotationBlurRadius(_ radius: CGFloat) {
         blurRadius = radius
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].blurRadius = radius
     }
 
     private func setAnnotationBlurStyle(_ style: BlurStyle) {
         blurStyle = style
-        guard let id = selectedId, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].blurStyle = style
     }
