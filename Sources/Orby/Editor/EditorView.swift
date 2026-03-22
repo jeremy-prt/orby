@@ -131,6 +131,11 @@ struct EditorView: View {
         }
     }
 
+    private var dominantBackgroundColor: Color {
+        let nsColor = extractDominantColor(from: currentImage)
+        return Color(nsColor: nsColor).opacity(0.95)
+    }
+
     init(originalImage: NSImage, savePath: URL, onClose: @escaping () -> Void) {
         self.originalImage = originalImage
         self.savePath = savePath
@@ -154,7 +159,7 @@ struct EditorView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            canvas.padding(.top, 38)
+            canvas.padding(.top, 38).clipped()
             toolbar.zIndex(1)
         }
         .ignoresSafeArea()
@@ -295,74 +300,90 @@ struct EditorView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 38)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Canvas
 
     private var canvas: some View {
         ZStack(alignment: .topTrailing) {
-            Color(nsColor: .controlBackgroundColor).frame(maxWidth: .infinity, maxHeight: .infinity)
+            dominantBackgroundColor.frame(maxWidth: .infinity, maxHeight: .infinity)
 
             GeometryReader { geo in
                 let imgSize = currentImage.size
-                // STABLE dw/dh — never affected by background toggle
+                // BASE canvas size (without zoom) — coordinate system for annotations
                 let fitScale = min(geo.size.width / max(imgSize.width, 1),
-                                   geo.size.height / max(imgSize.height, 1))
-                let dw = imgSize.width * fitScale, dh = imgSize.height * fitScale
+                                   geo.size.height / max(imgSize.height, 1),
+                                   1.0)
+                let baseDw = imgSize.width * fitScale, baseDh = imgSize.height * fitScale
+                // ZOOMED rendering size
+                let dw = baseDw * zoomLevel, dh = baseDh * zoomLevel
                 let ox = (geo.size.width - dw) / 2
                 let oy = (geo.size.height - dh) / 2
 
-                // Background: visual shrink so canvas + padding fits in same area
+                // Background: visual shrink so canvas + padding fits in same area (computed from BASE size)
                 let padPct = bgConfig.enabled ? bgConfig.padding / 100.0 : 0
                 let bgShrink = bgConfig.enabled ? 1.0 / (1.0 + 2.0 * padPct) : 1.0
                 let cornerPx = bgConfig.enabled
-                    ? bgConfig.cornerRadius / 100.0 * min(dw * bgShrink, dh * bgShrink) / 2 : 0
-                let shadowPx = bgConfig.enabled ? dw * (1 - bgShrink) / 2 : 0
+                    ? bgConfig.cornerRadius / 100.0 * min(baseDw * bgShrink, baseDh * bgShrink) / 2 : 0
+                let shadowPx = bgConfig.enabled ? baseDw * (1 - bgShrink) / 2 : 0
 
                 ZStack {
                     // Background gradient/color (fills dw x dh, visible around the shrunk canvas)
                     if bgConfig.enabled {
-                        backgroundView(width: dw, height: dh)
+                        backgroundView(width: baseDw, height: baseDh)
                             .frame(width: dw, height: dh)
+                            .scaleEffect(zoomLevel)
                             .allowsHitTesting(false)
                     }
 
-                    // Inner canvas: dw x dh coordinate space, visually shrunk when bg on
+                    // Inner canvas: dw x dh rendering size, but annotations use baseDw x baseDh coords
                     ZStack(alignment: .topLeading) {
+                        // Image — clipped with corner radius when background is on
                         Image(nsImage: currentImage).resizable().aspectRatio(contentMode: .fit)
                             .frame(width: dw, height: dh)
+                            .clipShape(bgConfig.enabled ? AnyShape(RoundedRectangle(cornerRadius: cornerPx * zoomLevel)) : AnyShape(Rectangle()))
+                            .shadow(color: bgConfig.enabled && bgConfig.shadowEnabled
+                                        ? .black.opacity(bgConfig.shadowOpacity) : .clear,
+                                    radius: bgConfig.enabled ? shadowPx * zoomLevel * 0.5 : 0,
+                                    y: bgConfig.enabled ? shadowPx * zoomLevel * 0.15 : 0)
 
+                        // Annotations — pass baseDw x baseDh as canvasSize for coordinate mapping, pass zoomLevel for rendering
                         ForEach(history.annotations) { ann in
                             if ann.id != editingTextId {
                                 if ann.shape == .blur {
                                     BlurRegionView(annotation: ann, image: currentImage,
-                                                   canvasSize: CGSize(width: dw, height: dh))
+                                                   canvasSize: CGSize(width: baseDw, height: baseDh),
+                                                   zoomLevel: zoomLevel)
                                 } else {
                                     AnnotationView(annotation: ann,
-                                                   canvasSize: CGSize(width: dw, height: dh))
+                                                   canvasSize: CGSize(width: baseDw, height: baseDh),
+                                                   zoomLevel: zoomLevel)
                                 }
                             }
                         }.frame(width: dw, height: dh)
 
                         if let hId = hoveredId, !selectedIds.contains(hId),
                            let hAnn = history.annotations.first(where: { $0.id == hId }) {
-                            HoverOverlay(annotation: hAnn, canvasSize: CGSize(width: dw, height: dh))
+                            HoverOverlay(annotation: hAnn, canvasSize: CGSize(width: baseDw, height: baseDh), zoomLevel: zoomLevel)
                                 .frame(width: dw, height: dh)
                         }
 
                         if case .drawing(let ann) = interaction {
                             if ann.shape == .blur {
                                 BlurRegionView(annotation: ann, image: currentImage,
-                                               canvasSize: CGSize(width: dw, height: dh))
+                                               canvasSize: CGSize(width: baseDw, height: baseDh),
+                                               zoomLevel: zoomLevel)
                                     .frame(width: dw, height: dh)
                             } else {
                                 AnnotationView(annotation: ann,
-                                               canvasSize: CGSize(width: dw, height: dh))
+                                               canvasSize: CGSize(width: baseDw, height: baseDh),
+                                               zoomLevel: zoomLevel)
                                     .frame(width: dw, height: dh)
                             }
                         }
                         if case .freehand(let pts) = interaction, pts.count >= 2 {
-                            FreehandPreview(points: pts, color: annotationColor, lineWidth: annotationLineWidth)
+                            FreehandPreview(points: pts, color: annotationColor, lineWidth: annotationLineWidth, zoomLevel: zoomLevel)
                                 .frame(width: dw, height: dh)
                         }
 
@@ -371,7 +392,8 @@ struct EditorView: View {
                             TextEditingOverlay(
                                 text: $editingText,
                                 annotation: ann,
-                                canvasSize: CGSize(width: dw, height: dh),
+                                canvasSize: CGSize(width: baseDw, height: baseDh),
+                                zoomLevel: zoomLevel,
                                 onCommit: { commitTextEdit() }
                             )
                             .frame(width: dw, height: dh)
@@ -380,7 +402,8 @@ struct EditorView: View {
                         ForEach(selectedAnnotations, id: \.id) { sel in
                             if editingTextId != sel.id {
                                 SelectionOverlay(annotation: sel,
-                                                 canvasSize: CGSize(width: dw, height: dh))
+                                                 canvasSize: CGSize(width: baseDw, height: baseDh),
+                                                 zoomLevel: zoomLevel)
                                     .frame(width: dw, height: dh)
                             }
                         }
@@ -388,33 +411,28 @@ struct EditorView: View {
                         if selectedTool == "crop", let s = cropStart, let e = cropEnd {
                             let r = normalizedRect(from: s, to: e)
                             Color.black.opacity(0.4).frame(width: dw, height: dh)
-                                .mask(CropMask(rect: r, size: CGSize(width: dw, height: dh)))
-                            Rectangle().stroke(Color.white, lineWidth: 2)
-                                .frame(width: r.width, height: r.height).position(x: r.midX, y: r.midY)
+                                .mask(CropMask(rect: r, size: CGSize(width: baseDw, height: baseDh), zoomLevel: zoomLevel))
+                            Rectangle().stroke(Color.white, lineWidth: 2 / zoomLevel)
+                                .frame(width: r.width * zoomLevel, height: r.height * zoomLevel)
+                                .position(x: r.midX * zoomLevel, y: r.midY * zoomLevel)
                         }
                     }
                     .frame(width: dw, height: dh)
-                    .clipShape(bgConfig.enabled ? AnyShape(RoundedRectangle(cornerRadius: cornerPx)) : AnyShape(Rectangle()))
-                    .shadow(color: bgConfig.enabled && bgConfig.shadowEnabled
-                                ? .black.opacity(bgConfig.shadowOpacity) : .clear,
-                            radius: bgConfig.enabled ? shadowPx * 0.5 : 0,
-                            y: bgConfig.enabled ? shadowPx * 0.15 : 0)
                     .scaleEffect(bgShrink)
                 }
                 .frame(width: dw, height: dh)
                 .contentShape(Rectangle())
-                .scaleEffect(zoomLevel)
                 .offset(x: ox + panOffset.width, y: oy + panOffset.height)
                 .gesture(
                     DragGesture(minimumDistance: 1)
-                        .onChanged { v in handleDrag(v, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink) }
-                        .onEnded { v in handleDragEnd(v, dw: dw, dh: dh, ox: ox, oy: oy) }
+                        .onChanged { v in handleDrag(v, baseDw: baseDw, baseDh: baseDh, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink) }
+                        .onEnded { v in handleDragEnd(v, baseDw: baseDw, baseDh: baseDh) }
                 )
-                .onTapGesture { loc in handleTap(loc, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink) }
+                .onTapGesture { loc in handleTap(loc, baseDw: baseDw, baseDh: baseDh, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink) }
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let loc):
-                        let pt = canvasPoint(loc, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
+                        let pt = canvasPoint(loc, baseDw: baseDw, baseDh: baseDh, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
                         updateCursor(at: pt)
                         hoveredId = history.annotations.last(where: { $0.hitTest(pt) })?.id
                     case .ended:
@@ -423,12 +441,11 @@ struct EditorView: View {
                     }
                 }
                 .onAppear {
-                    canvasSize = CGSize(width: dw, height: dh)
+                    canvasSize = CGSize(width: baseDw, height: baseDh)
                     setupScrollMonitors()
                 }
                 .onDisappear { removeScrollMonitors() }
             }
-            .clipped()
 
             // Crop toolbar (top-right)
             if selectedTool == "crop" && cropStart != nil && cropEnd != nil {
@@ -457,31 +474,39 @@ struct EditorView: View {
                     onChangeTextBackground: { v in setAnnotationTextBackground(v); textHasBackground = v },
                     onChangeBlurRadius: { r in setAnnotationBlurRadius(r); blurRadius = r },
                     onChangeBlurStyle: { s in setAnnotationBlurStyle(s); blurStyle = s },
+                    onChangeCornerRadius: { r in setAnnotationCornerRadius(r) },
                     onDeselect: { selectedIds = []; selectedTool = "cursor" },
                     onDelete: { deleteSelectedAnnotations() }
                 )
                 .padding(8)
             }
         }
-        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity).layoutPriority(1)
     }
 
     // MARK: - Gesture handling
 
-    private func canvasPoint(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat, bgShrink: CGFloat = 1.0) -> CGPoint {
-        // Combined effective zoom = zoomLevel (user zoom) * bgShrink (background visual scale)
-        // The outer ZStack is dw x dh, canvas inside is scaled by bgShrink from center
-        let ez = zoomLevel * bgShrink
-        let x = (location.x - ox - panOffset.width) / ez + (dw - dw / ez) / 2
-        let y = (location.y - oy - panOffset.height) / ez + (dh - dh / ez) / 2
-        return CGPoint(x: max(0, min(x, dw)), y: max(0, min(y, dh)))
+    private func canvasPoint(_ location: CGPoint, baseDw: CGFloat, baseDh: CGFloat, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat, bgShrink: CGFloat = 1.0) -> CGPoint {
+        // Convert screen coords to canvas frame space (which is dw x dh)
+        let canvasX = location.x - ox - panOffset.width
+        let canvasY = location.y - oy - panOffset.height
+
+        // Canvas frame is dw x dh (zoomed), need to convert to baseDw x baseDh (annotation space)
+        // Account for bgShrink centering
+        let contentX = canvasX / bgShrink + (dw - dw / bgShrink) / (2 * bgShrink)
+        let contentY = canvasY / bgShrink + (dh - dh / bgShrink) / (2 * bgShrink)
+
+        // Convert zoomed space back to base space
+        let x = contentX / zoomLevel
+        let y = contentY / zoomLevel
+
+        return CGPoint(x: max(0, min(x, baseDw)), y: max(0, min(y, baseDh)))
     }
 
-    private func handleDrag(_ value: DragGesture.Value, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat, bgShrink: CGFloat = 1.0) {
-        let start = canvasPoint(value.startLocation, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
-        let current = canvasPoint(value.location, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
-        canvasSize = CGSize(width: dw, height: dh)
+    private func handleDrag(_ value: DragGesture.Value, baseDw: CGFloat, baseDh: CGFloat, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat, bgShrink: CGFloat = 1.0) {
+        let start = canvasPoint(value.startLocation, baseDw: baseDw, baseDh: baseDh, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
+        let current = canvasPoint(value.location, baseDw: baseDw, baseDh: baseDh, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
+        canvasSize = CGSize(width: baseDw, height: baseDh)
 
         // Determine interaction on first move
         if case .none = interaction {
@@ -606,7 +631,7 @@ struct EditorView: View {
         }
     }
 
-    private func handleDragEnd(_ value: DragGesture.Value, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat) {
+    private func handleDragEnd(_ value: DragGesture.Value, baseDw: CGFloat, baseDh: CGFloat) {
         switch interaction {
         case .drawing(let ann):
             let dist = hypot(abs(ann.end.x - ann.start.x), abs(ann.end.y - ann.start.y))
@@ -635,8 +660,8 @@ struct EditorView: View {
         interaction = .none
     }
 
-    private func handleTap(_ location: CGPoint, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat, bgShrink: CGFloat = 1.0) {
-        let pt = canvasPoint(location, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
+    private func handleTap(_ location: CGPoint, baseDw: CGFloat, baseDh: CGFloat, dw: CGFloat, dh: CGFloat, ox: CGFloat, oy: CGFloat, bgShrink: CGFloat = 1.0) {
+        let pt = canvasPoint(location, baseDw: baseDw, baseDh: baseDh, dw: dw, dh: dh, ox: ox, oy: oy, bgShrink: bgShrink)
 
         // Text tool: if already editing, commit and switch to select
         if selectedTool == "text" && editingTextId != nil {
@@ -1061,6 +1086,40 @@ struct EditorView: View {
         guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
         history.save()
         history.annotations[idx].blurStyle = style
+    }
+
+    private func setAnnotationCornerRadius(_ radius: CGFloat) {
+        guard let id = selectedIds.first, let idx = history.annotations.firstIndex(where: { $0.id == id }) else { return }
+        history.save()
+        history.annotations[idx].cornerRadius = radius
+    }
+
+    /// Extract the dominant color from the image by sampling the 4 corners and averaging them.
+    /// Falls back to controlBackgroundColor if unable to extract.
+    private func extractDominantColor(from image: NSImage) -> NSColor {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else {
+            return NSColor.controlBackgroundColor
+        }
+
+        let w = bitmap.pixelsWide, h = bitmap.pixelsHigh
+        guard w > 0 && h > 0 else {
+            return NSColor.controlBackgroundColor
+        }
+
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+        let points = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+
+        for (px, py) in points {
+            guard let color = bitmap.colorAt(x: px, y: py)?
+                .usingColorSpace(.deviceRGB) else { continue }
+            r += color.redComponent
+            g += color.greenComponent
+            b += color.blueComponent
+        }
+
+        let n = CGFloat(points.count)
+        return NSColor(red: r / n, green: g / n, blue: b / n, alpha: 1.0)
     }
 
     private func quickSave() {

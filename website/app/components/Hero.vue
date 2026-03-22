@@ -55,14 +55,14 @@
       <div class="max-w-3xl w-full mx-auto">
         <div ref="mockup" class="rounded-2xl overflow-hidden shadow-2xl shadow-black/15 border border-gray-200/50 bg-gray-100 will-change-transform origin-center">
           <!-- macOS title bar -->
-          <div class="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200/60">
+          <div class="flex items-center gap-2 px-4 py-3 bg-brand-overlay/20">
             <span class="w-3 h-3 rounded-full bg-[#ff5f57]" />
             <span class="w-3 h-3 rounded-full bg-[#febd2e]" />
             <span class="w-3 h-3 rounded-full bg-[#28c840]" />
           </div>
           <!-- Placeholder — replace with video when ready -->
-          <div class="w-full aspect-video bg-linear-to-br from-brand-overlay/30 to-brand-overlay/10 flex items-center justify-center">
-            <Icon name="mdi:play-circle-outline" class="text-5xl text-brand/30" />
+          <div class="w-full aspect-video bg-brand-overlay/20 flex items-center justify-center">
+            <Icon name="mdi:play-circle-outline" class="text-5xl text-brand/20" />
           </div>
         </div>
       </div>

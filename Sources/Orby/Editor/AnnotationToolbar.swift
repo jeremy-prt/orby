@@ -18,6 +18,7 @@ struct AnnotationToolbar: View {
     let onChangeTextBackground: (Bool) -> Void
     let onChangeBlurRadius: (CGFloat) -> Void
     let onChangeBlurStyle: (BlurStyle) -> Void
+    let onChangeCornerRadius: (CGFloat) -> Void
     let onDeselect: () -> Void
     let onDelete: () -> Void
 
@@ -76,6 +77,32 @@ struct AnnotationToolbar: View {
                                active: annotation.filled && !annotation.solidFill)
                     fillButton(icon: "square.fill", mode: .solidFilled,
                                active: annotation.filled && annotation.solidFill)
+                }
+            }
+
+            // Corner radius (for rect and line)
+            if annotation.shape == .rect || annotation.shape == .line {
+                Divider().frame(height: 18)
+                if annotation.shape == .rect {
+                    Image(systemName: "square.on.square.squareshape.controlhandles")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    ThicknessSlider(
+                        value: annotation.cornerRadius,
+                        range: 0...30,
+                        onChange: onChangeCornerRadius
+                    )
+                } else {
+                    // Line: toggle round caps
+                    Button {
+                        onChangeCornerRadius(annotation.cornerRadius > 0 ? 0 : 1)
+                    } label: {
+                        Image(systemName: annotation.cornerRadius > 0 ? "capsule.fill" : "capsule")
+                            .font(.system(size: 12))
+                            .frame(width: 24, height: 22)
+                            .background(RoundedRectangle(cornerRadius: 4)
+                                .fill(annotation.cornerRadius > 0 ? brandPurple.opacity(0.2) : Color.clear))
+                    }.buttonStyle(.plain)
                 }
             }
 

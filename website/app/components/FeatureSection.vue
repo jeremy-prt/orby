@@ -16,7 +16,7 @@
       <div class="flex-1 w-full max-w-lg">
         <div class="rounded-2xl overflow-hidden shadow-xl shadow-black/10 border border-gray-200/50 bg-gray-100">
           <!-- macOS title bar -->
-          <div class="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200/60">
+          <div :class="['flex items-center gap-2 px-4 py-2.5', video || fallback ? 'bg-gray-50 border-b border-gray-200/60' : 'bg-brand-overlay/20']">
             <span class="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
             <span class="w-2.5 h-2.5 rounded-full bg-[#febd2e]" />
             <span class="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
@@ -40,8 +40,8 @@
             loading="lazy"
           />
           <!-- Placeholder if no media -->
-          <div v-else class="w-full aspect-video bg-linear-to-br from-brand-overlay/30 to-brand-overlay/10 flex items-center justify-center">
-            <Icon name="mdi:play-circle-outline" class="text-5xl text-brand/30" />
+          <div v-else class="w-full aspect-video bg-brand-overlay/20 flex items-center justify-center">
+            <Icon name="mdi:play-circle-outline" class="text-5xl text-brand/20" />
           </div>
         </div>
       </div>

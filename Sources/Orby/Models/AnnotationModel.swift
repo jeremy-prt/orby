@@ -51,6 +51,7 @@ struct Annotation: Identifiable, Equatable {
     var blurRadius: CGFloat
     var blurStyle: BlurStyle
     var rotation: Double
+    var cornerRadius: CGFloat
 
     init(shape: AnnotationShape, start: CGPoint, end: CGPoint,
          color: Color = .red, lineWidth: CGFloat = 3, filled: Bool = false, solidFill: Bool = false,
@@ -58,7 +59,7 @@ struct Annotation: Identifiable, Equatable {
          arrowStyle: ArrowStyle = .thin, controlPoint: CGPoint? = nil,
          textHasBackground: Bool = true,
          blurRadius: CGFloat = 10, blurStyle: BlurStyle = .gaussian,
-         rotation: Double = 0) {
+         rotation: Double = 0, cornerRadius: CGFloat = 0) {
         self.id = UUID()
         self.shape = shape
         self.start = start
@@ -76,6 +77,7 @@ struct Annotation: Identifiable, Equatable {
         self.blurRadius = blurRadius
         self.blurStyle = blurStyle
         self.rotation = rotation
+        self.cornerRadius = cornerRadius
     }
 
     var boundingRect: CGRect {
@@ -334,7 +336,7 @@ struct Annotation: Identifiable, Equatable {
             controlPoint: controlPoint,
             textHasBackground: textHasBackground,
             blurRadius: blurRadius, blurStyle: blurStyle,
-            rotation: rotation
+            rotation: rotation, cornerRadius: cornerRadius
         )
         if offset.width != 0 || offset.height != 0 {
             copy.start.x += offset.width

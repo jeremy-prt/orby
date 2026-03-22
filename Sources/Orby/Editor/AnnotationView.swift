@@ -6,6 +6,7 @@ import AppKit
 struct AnnotationView: View {
     let annotation: Annotation
     var canvasSize: CGSize = .zero
+    var zoomLevel: CGFloat = 1.0
 
     private var rotationAnchor: UnitPoint {
         guard canvasSize.width > 0 && canvasSize.height > 0 else { return .center }
@@ -16,19 +17,23 @@ struct AnnotationView: View {
     var body: some View {
         if annotation.shape == .text {
             textView
+                .scaleEffect(zoomLevel, anchor: rotationAnchor)
                 .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         } else if annotation.shape == .numbered {
             numberedView
+                .scaleEffect(zoomLevel, anchor: rotationAnchor)
                 .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         } else if annotation.shape == .blur {
             blurPreview
+                .scaleEffect(zoomLevel, anchor: rotationAnchor)
                 .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         } else {
-            Canvas { ctx, _ in
+            Canvas { ctx, size in
                 if annotation.shape == .freehand {
                     drawFreehand(ctx: ctx)
                 } else {
-                    let s = annotation.start, e = annotation.end
+                    let s = CGPoint(x: annotation.start.x * zoomLevel, y: annotation.start.y * zoomLevel)
+                    let e = CGPoint(x: annotation.end.x * zoomLevel, y: annotation.end.y * zoomLevel)
                     if annotation.shape == .arrow {
                         drawArrow(ctx: ctx, from: s, to: e)
                     } else {
@@ -37,7 +42,8 @@ struct AnnotationView: View {
                             let opacity: Double = annotation.solidFill ? 1.0 : 0.3
                             ctx.fill(path, with: .color(annotation.color.opacity(opacity)))
                         }
-                        ctx.stroke(path, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+                        let cap: CGLineCap = annotation.cornerRadius > 0 ? .round : .butt
+                        ctx.stroke(path, with: .color(annotation.color), style: StrokeStyle(lineWidth: annotation.lineWidth * zoomLevel, lineCap: cap, lineJoin: .round))
                     }
                 }
             }
@@ -51,6 +57,8 @@ struct AnnotationView: View {
     @ViewBuilder
     private var blurPreview: some View {
         let rect = annotation.boundingRect
+        let rectZoomed = CGRect(x: rect.minX * zoomLevel, y: rect.minY * zoomLevel,
+                                width: rect.width * zoomLevel, height: rect.height * zoomLevel)
         ZStack {
             switch annotation.blurStyle {
             case .gaussian:
@@ -68,7 +76,7 @@ struct AnnotationView: View {
                     }
                     ctx.stroke(lines, with: .color(Color.gray.opacity(0.3)), lineWidth: 1)
                 }
-                .frame(width: rect.width, height: rect.height)
+                .frame(width: rectZoomed.width, height: rectZoomed.height)
             case .pixelate:
                 Canvas { ctx, size in
                     let r = CGRect(origin: .zero, size: size)
@@ -89,17 +97,17 @@ struct AnnotationView: View {
                     }
                     ctx.stroke(grid, with: .color(Color.gray.opacity(0.3)), lineWidth: 0.5)
                 }
-                .frame(width: rect.width, height: rect.height)
+                .frame(width: rectZoomed.width, height: rectZoomed.height)
             }
 
             Image(systemName: blurStyleIcon)
-                .font(.system(size: min(rect.width, rect.height) * 0.3, weight: .medium))
+                .font(.system(size: min(rectZoomed.width, rectZoomed.height) * 0.3, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.7))
         }
-        .frame(width: rect.width, height: rect.height)
+        .frame(width: rectZoomed.width, height: rectZoomed.height)
         .clipShape(Rectangle())
-        .overlay(Rectangle().stroke(Color.gray.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-        .position(x: rect.midX, y: rect.midY)
+        .overlay(Rectangle().stroke(Color.gray.opacity(0.5), style: StrokeStyle(lineWidth: 1 / zoomLevel, dash: [4, 3])))
+        .position(x: rectZoomed.midX, y: rectZoomed.midY)
         .allowsHitTesting(false)
     }
 
@@ -124,21 +132,21 @@ struct AnnotationView: View {
                         .fill(annotation.color)
                 }
                 Text(annotation.text)
-                    .font(.system(size: annotation.fontSize, weight: .medium))
+                    .font(.system(size: annotation.fontSize * zoomLevel, weight: .medium))
                     .foregroundStyle(textColor)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 4)
             }
             .fixedSize()
-            .position(x: annotation.start.x + rect.width / 2,
-                      y: annotation.start.y + rect.height / 2)
+            .position(x: annotation.start.x * zoomLevel + rect.width * zoomLevel / 2,
+                      y: annotation.start.y * zoomLevel + rect.height * zoomLevel / 2)
             .allowsHitTesting(false)
         }
     }
 
     @ViewBuilder
     private var numberedView: some View {
-        let size = annotation.fontSize * 1.6
+        let size = annotation.fontSize * 1.6 * zoomLevel
         let textColor = textColorForBackground(annotation.color)
         ZStack {
             Circle()
@@ -146,10 +154,10 @@ struct AnnotationView: View {
                 .frame(width: size, height: size)
                 .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             Text(annotation.text)
-                .font(.system(size: annotation.fontSize * 0.75, weight: .bold))
+                .font(.system(size: annotation.fontSize * 0.75 * zoomLevel, weight: .bold))
                 .foregroundStyle(textColor)
         }
-        .position(x: annotation.start.x + size / 2, y: annotation.start.y + size / 2)
+        .position(x: annotation.start.x * zoomLevel + size / 2, y: annotation.start.y * zoomLevel + size / 2)
         .allowsHitTesting(false)
     }
 
@@ -165,27 +173,34 @@ struct AnnotationView: View {
     private func drawFreehand(ctx: GraphicsContext) {
         guard annotation.points.count >= 2 else { return }
         var p = Path()
-        p.move(to: annotation.points[0])
+        let firstPt = CGPoint(x: annotation.points[0].x * zoomLevel, y: annotation.points[0].y * zoomLevel)
+        p.move(to: firstPt)
         if annotation.points.count == 2 {
-            p.addLine(to: annotation.points[1])
+            let secondPt = CGPoint(x: annotation.points[1].x * zoomLevel, y: annotation.points[1].y * zoomLevel)
+            p.addLine(to: secondPt)
         } else {
             for i in 1..<annotation.points.count {
-                let mid = CGPoint(
-                    x: (annotation.points[i - 1].x + annotation.points[i].x) / 2,
-                    y: (annotation.points[i - 1].y + annotation.points[i].y) / 2
-                )
-                p.addQuadCurve(to: mid, control: annotation.points[i - 1])
+                let prevPt = CGPoint(x: annotation.points[i - 1].x * zoomLevel, y: annotation.points[i - 1].y * zoomLevel)
+                let currPt = CGPoint(x: annotation.points[i].x * zoomLevel, y: annotation.points[i].y * zoomLevel)
+                let mid = CGPoint(x: (prevPt.x + currPt.x) / 2, y: (prevPt.y + currPt.y) / 2)
+                p.addQuadCurve(to: mid, control: prevPt)
             }
-            p.addLine(to: annotation.points.last!)
+            let lastPt = CGPoint(x: annotation.points.last!.x * zoomLevel, y: annotation.points.last!.y * zoomLevel)
+            p.addLine(to: lastPt)
         }
-        ctx.stroke(p, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        ctx.stroke(p, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
     }
 
     private func shapePath(from s: CGPoint, to e: CGPoint) -> Path {
         var p = Path()
         let r = CGRect(x: min(s.x, e.x), y: min(s.y, e.y), width: abs(e.x - s.x), height: abs(e.y - s.y))
         switch annotation.shape {
-        case .rect: p.addRect(r)
+        case .rect:
+            if annotation.cornerRadius > 0 {
+                p.addRoundedRect(in: r, cornerSize: CGSize(width: annotation.cornerRadius, height: annotation.cornerRadius))
+            } else {
+                p.addRect(r)
+            }
         case .circle: p.addEllipse(in: r)
         case .line: p.move(to: s); p.addLine(to: e)
         case .arrow, .text, .freehand, .blur, .numbered: break
@@ -217,48 +232,57 @@ struct AnnotationView: View {
     private func drawThinArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, angle: CGFloat) {
         var shaft = Path()
         shaft.move(to: s)
-        if let cp = cp { shaft.addQuadCurve(to: e, control: cp) }
-        else { shaft.addLine(to: e) }
-        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        if let cp = cp {
+            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
+            shaft.addQuadCurve(to: e, control: cpZoomed)
+        } else {
+            shaft.addLine(to: e)
+        }
+        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
 
-        let hl: CGFloat = 15, ha: CGFloat = .pi / 6
+        let hl: CGFloat = 15 * zoomLevel, ha: CGFloat = .pi / 6
         var head = Path()
         head.move(to: e)
         head.addLine(to: CGPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha)))
         head.move(to: e)
         head.addLine(to: CGPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha)))
-        ctx.stroke(head, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        ctx.stroke(head, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
     }
 
     private func drawOutlineArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, angle: CGFloat) {
-        let hl: CGFloat = 20, ha: CGFloat = .pi / 6
+        let hl: CGFloat = 20 * zoomLevel, ha: CGFloat = .pi / 6
         let left = CGPoint(x: e.x - hl * cos(angle - ha), y: e.y - hl * sin(angle - ha))
         let right = CGPoint(x: e.x - hl * cos(angle + ha), y: e.y - hl * sin(angle + ha))
         let baseCenter = CGPoint(x: (left.x + right.x) / 2, y: (left.y + right.y) / 2)
 
         var head = Path()
         head.move(to: e); head.addLine(to: left); head.addLine(to: right); head.closeSubpath()
-        ctx.stroke(head, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        ctx.stroke(head, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
 
         var shaft = Path()
         shaft.move(to: s)
-        if let cp = cp { shaft.addQuadCurve(to: baseCenter, control: cp) }
-        else { shaft.addLine(to: baseCenter) }
-        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        if let cp = cp {
+            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
+            shaft.addQuadCurve(to: baseCenter, control: cpZoomed)
+        } else {
+            shaft.addLine(to: baseCenter)
+        }
+        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
     }
 
     private func drawFilledArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, angle: CGFloat, hasCurve: Bool) {
-        let shaftWidth = annotation.lineWidth * 3
-        let headLength: CGFloat = max(shaftWidth * 3, 30)
-        let headWidth: CGFloat = max(shaftWidth * 2.5, 25)
+        let shaftWidth = annotation.lineWidth * 3 * zoomLevel
+        let headLength: CGFloat = max(shaftWidth * 3, 30 * zoomLevel)
+        let headWidth: CGFloat = max(shaftWidth * 2.5, 25 * zoomLevel)
         let totalLength = hypot(e.x - s.x, e.y - s.y)
         guard totalLength > 1 else { return }
 
         if hasCurve, let cp = cp {
+            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
             let headRatio = min(headLength / totalLength, 0.5)
             let shaftEndT = max(0, 1.0 - headRatio)
-            let shaftEnd = bezierPoint(t: shaftEndT, from: s, control: cp, to: e)
-            let perpHead = bezierTangentAngle(t: 1.0, from: s, control: cp, to: e) + .pi / 2
+            let shaftEnd = bezierPoint(t: shaftEndT, from: s, control: cpZoomed, to: e)
+            let perpHead = bezierTangentAngle(t: 1.0, from: s, control: cpZoomed, to: e) + .pi / 2
             let leftHead = CGPoint(x: shaftEnd.x + headWidth * cos(perpHead), y: shaftEnd.y + headWidth * sin(perpHead))
             let rightHead = CGPoint(x: shaftEnd.x - headWidth * cos(perpHead), y: shaftEnd.y - headWidth * sin(perpHead))
 
@@ -266,8 +290,8 @@ struct AnnotationView: View {
             var leftPoints: [CGPoint] = [], rightPoints: [CGPoint] = []
             for i in 0...steps {
                 let t = CGFloat(i) / CGFloat(steps) * shaftEndT
-                let pt = bezierPoint(t: t, from: s, control: cp, to: e)
-                let tang = bezierTangentAngle(t: t, from: s, control: cp, to: e)
+                let pt = bezierPoint(t: t, from: s, control: cpZoomed, to: e)
+                let tang = bezierTangentAngle(t: t, from: s, control: cpZoomed, to: e)
                 let perp = tang + .pi / 2
                 let halfW = shaftWidth / 2
                 leftPoints.append(CGPoint(x: pt.x + halfW * cos(perp), y: pt.y + halfW * sin(perp)))
@@ -302,24 +326,28 @@ struct AnnotationView: View {
     private func drawDoubleArrow(ctx: GraphicsContext, from s: CGPoint, to e: CGPoint, cp: CGPoint?, endAngle: CGFloat, startAngle: CGFloat) {
         var shaft = Path()
         shaft.move(to: s)
-        if let cp = cp { shaft.addQuadCurve(to: e, control: cp) }
-        else { shaft.addLine(to: e) }
-        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        if let cp = cp {
+            let cpZoomed = CGPoint(x: cp.x * zoomLevel, y: cp.y * zoomLevel)
+            shaft.addQuadCurve(to: e, control: cpZoomed)
+        } else {
+            shaft.addLine(to: e)
+        }
+        ctx.stroke(shaft, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
 
-        let hl: CGFloat = 15, ha: CGFloat = .pi / 6
+        let hl: CGFloat = 15 * zoomLevel, ha: CGFloat = .pi / 6
         var headEnd = Path()
         headEnd.move(to: e)
         headEnd.addLine(to: CGPoint(x: e.x - hl * cos(endAngle - ha), y: e.y - hl * sin(endAngle - ha)))
         headEnd.move(to: e)
         headEnd.addLine(to: CGPoint(x: e.x - hl * cos(endAngle + ha), y: e.y - hl * sin(endAngle + ha)))
-        ctx.stroke(headEnd, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        ctx.stroke(headEnd, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
 
         var headStart = Path()
         headStart.move(to: s)
         headStart.addLine(to: CGPoint(x: s.x - hl * cos(startAngle - ha), y: s.y - hl * sin(startAngle - ha)))
         headStart.move(to: s)
         headStart.addLine(to: CGPoint(x: s.x - hl * cos(startAngle + ha), y: s.y - hl * sin(startAngle + ha)))
-        ctx.stroke(headStart, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+        ctx.stroke(headStart, with: .color(annotation.color), lineWidth: annotation.lineWidth * zoomLevel)
     }
 
     // MARK: - Bézier helpers

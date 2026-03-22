@@ -21,7 +21,7 @@ class EditorWindow {
         let s = min(maxW / max(image.size.width, 1), maxH / max(image.size.height, 1), 1.0)
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: max(image.size.width * s, 600), height: max(image.size.height * s, 400) + 50),
+            contentRect: NSRect(x: 0, y: 0, width: max(image.size.width * s, 900), height: max(image.size.height * s, 400) + 50),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered, defer: false
         )
@@ -29,12 +29,12 @@ class EditorWindow {
         win.titlebarAppearsTransparent = true
         win.titleVisibility = .hidden
         win.styleMask.insert(.fullSizeContentView)
-        // Add empty toolbar to push traffic lights down to align with our SwiftUI toolbar
+        // Push traffic lights down into the title bar area
         let tb = NSToolbar(identifier: "editorToolbar")
         tb.showsBaselineSeparator = false
         win.toolbar = tb
         win.toolbarStyle = .unifiedCompact
-        win.minSize = NSSize(width: 400, height: 300)
+        win.minSize = NSSize(width: 900, height: 400)
         win.contentView = hostingView
         win.center()
         win.isReleasedWhenClosed = false

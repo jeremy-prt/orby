@@ -37,6 +37,8 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
         nsColor.setStroke()
         let path = NSBezierPath()
         path.lineWidth = ann.lineWidth * sx
+        path.lineCapStyle = ann.cornerRadius > 0 ? .round : .butt
+        path.lineJoinStyle = .round
 
         // Apply rotation transform around annotation center in image coordinates
         let hasRotation = ann.rotation != 0
@@ -55,7 +57,11 @@ func flattenAnnotations(_ annotations: [Annotation], onto image: NSImage, canvas
         switch ann.shape {
         case .rect:
             let r = NSRect(x: min(s.x, e.x), y: min(s.y, e.y), width: abs(e.x - s.x), height: abs(e.y - s.y))
-            path.appendRect(r)
+            if ann.cornerRadius > 0 {
+                path.appendRoundedRect(r, xRadius: ann.cornerRadius, yRadius: ann.cornerRadius)
+            } else {
+                path.appendRect(r)
+            }
             if ann.filled { nsColor.withAlphaComponent(ann.solidFill ? 1.0 : 0.3).setFill(); path.fill() }
             path.stroke()
         case .circle:

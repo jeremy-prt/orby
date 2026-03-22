@@ -6,6 +6,7 @@ struct BlurRegionView: View {
     let annotation: Annotation
     let image: NSImage
     let canvasSize: CGSize
+    var zoomLevel: CGFloat = 1.0
 
     private var rotationAnchor: UnitPoint {
         guard canvasSize.width > 0 && canvasSize.height > 0 else { return .center }
@@ -18,19 +19,21 @@ struct BlurRegionView: View {
         guard rect.width > 2 && rect.height > 2 else { return AnyView(EmptyView()) }
 
         let blurredImage = createBlurredRegion()
+        let rectZoomed = CGRect(x: rect.minX * zoomLevel, y: rect.minY * zoomLevel,
+                                width: rect.width * zoomLevel, height: rect.height * zoomLevel)
         return AnyView(
             Group {
                 if let blurredImage {
                     Image(nsImage: blurredImage)
                         .resizable()
-                        .frame(width: rect.width, height: rect.height)
+                        .frame(width: rectZoomed.width, height: rectZoomed.height)
                 } else {
                     Rectangle().fill(Color.gray.opacity(0.5))
-                        .frame(width: rect.width, height: rect.height)
+                        .frame(width: rectZoomed.width, height: rectZoomed.height)
                 }
             }
             .clipShape(Rectangle())
-            .position(x: rect.midX, y: rect.midY)
+            .position(x: rectZoomed.midX, y: rectZoomed.midY)
             .allowsHitTesting(false)
             .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         )

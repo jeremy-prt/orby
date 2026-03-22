@@ -67,6 +67,7 @@ struct TextEditingOverlay: View {
     @Binding var text: String
     let annotation: Annotation
     var canvasSize: CGSize = .zero
+    var zoomLevel: CGFloat = 1.0
     let onCommit: () -> Void
 
     private var rotationAnchor: UnitPoint {
@@ -91,8 +92,8 @@ struct TextEditingOverlay: View {
     var body: some View {
         let textColor: Color = annotation.textHasBackground
             ? contrastTextColor(for: annotation.color) : annotation.color
-        let editW = max(liveWidth, 40)
-        let editH = liveHeight
+        let editW = max(liveWidth, 40) * zoomLevel
+        let editH = liveHeight * zoomLevel
 
         ZStack(alignment: .topLeading) {
             Color.clear
@@ -102,10 +103,10 @@ struct TextEditingOverlay: View {
                         .fill(annotation.color)
                 }
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(brandPurple.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [4, 2]))
+                    .stroke(brandPurple.opacity(0.6), style: StrokeStyle(lineWidth: 1.5 / zoomLevel, dash: [4, 2]))
                 MultilineTextField(
                     text: $text,
-                    fontSize: annotation.fontSize,
+                    fontSize: annotation.fontSize * zoomLevel,
                     textColor: NSColor(textColor),
                     onCommit: onCommit
                 )
@@ -113,9 +114,10 @@ struct TextEditingOverlay: View {
                 .padding(.vertical, 4)
             }
             .frame(width: editW, height: editH)
-            .position(x: annotation.start.x + editW / 2,
-                      y: annotation.start.y + editH / 2)
+            .position(x: annotation.start.x * zoomLevel + editW / 2,
+                      y: annotation.start.y * zoomLevel + editH / 2)
         }
+        .scaleEffect(zoomLevel, anchor: rotationAnchor)
         .rotationEffect(.degrees(annotation.rotation), anchor: rotationAnchor)
         .allowsHitTesting(true)
     }

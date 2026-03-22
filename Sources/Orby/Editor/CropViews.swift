@@ -39,9 +39,18 @@ struct CropToolbar: View {
 // MARK: - Crop Mask
 
 struct CropMask: Shape {
-    let rect: CGRect; let size: CGSize
+    let rect: CGRect
+    let size: CGSize
+    var zoomLevel: CGFloat = 1.0
+
     func path(in frame: CGRect) -> Path {
-        var p = Path(); p.addRect(CGRect(origin: .zero, size: size)); p.addRect(rect); return p
+        let zoomedSize = CGSize(width: size.width * zoomLevel, height: size.height * zoomLevel)
+        let zoomedRect = CGRect(x: rect.minX * zoomLevel, y: rect.minY * zoomLevel,
+                                width: rect.width * zoomLevel, height: rect.height * zoomLevel)
+        var p = Path()
+        p.addRect(CGRect(origin: .zero, size: zoomedSize))
+        p.addRect(zoomedRect)
+        return p
     }
     var body: some View { self.fill(style: FillStyle(eoFill: true)) }
 }
