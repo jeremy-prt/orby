@@ -4,6 +4,30 @@
         <title>Orby Updates</title>
         <language>en</language>
         <item>
+            <title>Version 1.1.1</title>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <h2>Orby 1.1.1</h2>
+                <ul>
+                    <li>Fixed a crash when using the text recognition shortcut on macOS 26 and later</li>
+                    <li>Text recognition no longer freezes the app while it runs</li>
+                    <li>Falls back to fast recognition when the Neural Engine is unavailable, instead of waiting indefinitely</li>
+                    <li>New Fast mode option for text recognition: instant, but recognizes less text on dense screenshots</li>
+                    <li>Spanish and German text recognition now use their own language models instead of falling back to French</li>
+                    <li>Clearer feedback: partial results and failures are now reported instead of passing silently</li>
+                </ul>
+            ]]></description>
+            <pubDate>Wed, 16 Sep 2026 15:00:00 +0200</pubDate>
+            <enclosure
+                url="https://github.com/jeremy-prt/orby/releases/download/v1.1.1/Orby.dmg"
+                sparkle:edSignature="0HcsM61K98nZk7XqhcDaWj1L0zsTsfUDyYPs34G3XuRDnLS1RndxP/NInMcV56cMbiKJww5mwicxS4cVa2zvAg=="
+                length="3106211"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.1.0</title>
             <sparkle:version>2</sparkle:version>
             <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
