@@ -45,31 +45,9 @@ class ScreenCaptureService {
 
         guard let nsImage, let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
 
-        // OCR via Vision
+        // OCR via Vision, execute hors du main thread
         let ocrLang = UserDefaults.standard.string(forKey: "ocrLanguage") ?? "fr"
-        let languages: [String] = ocrLang == "en" ? ["en-US"] : ["fr-FR"]
-
-        let text: String? = await withCheckedContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-                let result = lines.joined(separator: "\n")
-                continuation.resume(returning: result.isEmpty ? nil : result)
-            }
-            request.recognitionLevel = .accurate
-            request.recognitionLanguages = languages
-            request.usesLanguageCorrection = true
-
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            do {
-                try handler.perform([request])
-            } catch {
-                continuation.resume(returning: nil)
-            }
-        }
+        let text = await Self.recognizeText(in: cgImage, language: ocrLang)
 
         if let text {
             let pasteboard = NSPasteboard.general
@@ -83,6 +61,34 @@ class ScreenCaptureService {
             )
         } else {
             ToastManager.shared.show(message: L10n.lang == "en" ? "No text found" : "Aucun texte trouvé")
+        }
+    }
+
+    /// Reconnaissance de texte, volontairement hors du MainActor.
+    /// L'ancienne implementation utilisait VNRecognizeTextRequest dans un withCheckedContinuation :
+    /// depuis macOS 26 cette API appelle son completion handler *puis* relance l'erreur, ce qui
+    /// resumait la continuation deux fois (SWIFT TASK CONTINUATION MISUSE) et gelait le main thread.
+    private nonisolated static func recognizeText(in cgImage: CGImage, language: String) async -> String? {
+        let identifier: String
+        switch language {
+        case "en": identifier = "en-US"
+        case "es": identifier = "es-ES"
+        case "de": identifier = "de-DE"
+        default: identifier = "fr-FR"
+        }
+
+        var request = RecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = [Locale.Language(identifier: identifier)]
+        request.usesLanguageCorrection = true
+
+        do {
+            let observations = try await request.perform(on: cgImage)
+            let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+            let result = lines.joined(separator: "\n")
+            return result.isEmpty ? nil : result
+        } catch {
+            return nil
         }
     }
 
