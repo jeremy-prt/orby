@@ -1,5 +1,4 @@
 import AppKit
-import CoreText
 import OSLog
 import Vision
 
@@ -123,43 +122,6 @@ class ScreenCaptureService {
         }
     }
 
-    /// Le premier appel a Vision recharge son modele de reconnaissance. C'est immediat sur une
-    /// machine saine, mais cela peut prendre une minute quand le cache du Neural Engine n'est pas
-    /// conservé (disque sature, erreurs e5rt). On paie ce cout une fois au lancement, en tache de
-    /// fond, plutot que sur le premier raccourci de l'utilisateur.
-    nonisolated static func warmUpOCR() {
-        Task.detached(priority: .utility) {
-            let language = visionLanguage(for: UserDefaults.standard.string(forKey: "ocrLanguage") ?? "fr")
-            guard let sample = warmUpImage() else { return }
-            let started = Date()
-            let outcome = await recognize(sample, language, level: .accurate, timeout: .seconds(180))
-            if case .text = outcome {
-                ocrLog.info("prechauffage OCR reussi en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
-            } else {
-                ocrLog.error("prechauffage OCR echoue apres \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
-            }
-        }
-    }
-
-    /// Vision rejette une image sans texte (CRImageReaderError) : la mire de chauffe en contient.
-    private nonisolated static func warmUpImage() -> CGImage? {
-        let width = 240, height = 80
-        guard let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
-        ) else { return nil }
-        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        let sample = NSAttributedString(string: "Orby 123", attributes: [
-            .font: NSFont.systemFont(ofSize: 36),
-            .foregroundColor: NSColor.black
-        ])
-        context.textPosition = CGPoint(x: 16, y: 24)
-        CTLineDraw(CTLineCreateWithAttributedString(sample), context)
-        return context.makeImage()
-    }
-
     /// Reconnaissance de texte, volontairement hors du MainActor.
     /// L'ancienne implementation utilisait VNRecognizeTextRequest dans un withCheckedContinuation :
     /// depuis macOS 26 cette API appelle son completion handler *puis* relance l'erreur, ce qui
@@ -169,8 +131,12 @@ class ScreenCaptureService {
 
         // Uniquement .accurate : mesure faite, .fast ne rend que 7 % du texte sur une capture
         // reelle (68 caracteres contre 926). Mieux vaut echouer franchement que coller un texte
-        // tronque a l'insu de l'utilisateur. Le delai n'est la que pour ne jamais rester bloque.
-        return await recognize(cgImage, identifier, level: .accurate, timeout: .seconds(120))
+        // tronque a l'insu de l'utilisateur.
+        //
+        // 30 s de delai de garde : sur une machine saine la reconnaissance tient sous la seconde.
+        // Au-dela, c'est que le Neural Engine recompile son modele sans y parvenir (erreur e5rt,
+        // constatee sur macOS 27) ; inutile de faire patienter plus longtemps pour un echec.
+        return await recognize(cgImage, identifier, level: .accurate, timeout: .seconds(30))
     }
 
     private nonisolated static func recognize(
