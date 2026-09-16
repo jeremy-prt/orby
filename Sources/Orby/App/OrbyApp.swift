@@ -48,6 +48,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             "appLanguage": defaultLang,
             "ocrLanguage": defaultLang
         ])
+        // Apres register(defaults:), pour prechauffer dans la bonne langue.
+        ScreenCaptureService.warmUpOCR()
+
         applyTheme(UserDefaults.standard.string(forKey: "appTheme") ?? "system")
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 

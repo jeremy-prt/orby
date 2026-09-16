@@ -1,5 +1,17 @@
 import AppKit
+import CoreText
+import OSLog
 import Vision
+
+let ocrLog = Logger(subsystem: "com.local.Orby", category: "ocr")
+
+/// Distingue une capture sans texte d'une reconnaissance qui a echoue : l'utilisateur doit
+/// savoir s'il faut recadrer ou si Vision est indisponible.
+enum OCROutcome {
+    case text(String)
+    case empty
+    case failed
+}
 
 @MainActor
 class ScreenCaptureService {
@@ -20,8 +32,12 @@ class ScreenCaptureService {
         // Capture area silently
         let tempURL = FileManager.default.temporaryDirectory.appending(path: "ocr_\(UUID().uuidString).png")
         let args = ["-x", "-s", tempURL.path]
+        ocrLog.info("captureOCR: lancement screencapture vers \(tempURL.path, privacy: .public)")
 
-        let nsImage: NSImage? = await withCheckedContinuation { continuation in
+        // On decode le PNG en memoire avant de supprimer le fichier : NSImage(contentsOf:) est
+        // paresseux et rendrait une image sans pixels une fois le temporaire efface, ce que Vision
+        // signale par un CRImageReaderError apres une vingtaine de secondes.
+        let cgImage: CGImage? = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -34,61 +50,160 @@ class ScreenCaptureService {
                         continuation.resume(returning: nil)
                         return
                     }
-                    let image = NSImage(contentsOf: tempURL)
+                    let data = try? Data(contentsOf: tempURL)
                     try? FileManager.default.removeItem(at: tempURL)
+                    guard let data,
+                          let source = CGImageSourceCreateWithData(data as CFData, nil),
+                          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                        ocrLog.error("captureOCR: PNG illisible (\(data?.count ?? -1, privacy: .public) octets)")
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(returning: image)
                 } catch {
+                    ocrLog.error("screencapture a echoue: \(error.localizedDescription, privacy: .public)")
                     continuation.resume(returning: nil)
                 }
             }
         }
 
-        guard let nsImage, let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        guard let cgImage else { return }
 
         // OCR via Vision, execute hors du main thread
         let ocrLang = UserDefaults.standard.string(forKey: "ocrLanguage") ?? "fr"
-        let text = await Self.recognizeText(in: cgImage, language: ocrLang)
+        let started = Date()
 
-        if let text {
+        // Vision peut mettre jusqu'a une minute a recompiler son modele apres une mise a jour
+        // de macOS : sans ce toast, l'app parait simplement figee.
+        let pending = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            ToastManager.shared.show(
+                title: L10n.tr4("Reading text...", "Lecture du texte...", "Leyendo texto...", "Text wird gelesen..."),
+                icon: "text.viewfinder",
+                autoDismiss: false
+            )
+        }
+
+        let outcome = await Self.recognizeText(in: cgImage, language: ocrLang)
+        pending.cancel()
+        ocrLog.info("OCR en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
+
+        switch outcome {
+        case .text(let text):
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
             let flat = text.replacingOccurrences(of: "\n", with: " ")
             let truncated = flat.count > 50 ? String(flat.prefix(50)) + "..." : flat
             ToastManager.shared.show(
-                message: L10n.lang == "en" ? "Text copied!" : "Texte copié !",
-                preview: truncated
+                title: L10n.tr4("Text copied!", "Texte copié !", "¡Texto copiado!", "Text kopiert!"),
+                subtitle: truncated
             )
-        } else {
-            ToastManager.shared.show(message: L10n.lang == "en" ? "No text found" : "Aucun texte trouvé")
+        case .empty:
+            ToastManager.shared.show(
+                title: L10n.tr4("No text found", "Aucun texte trouvé", "No se encontró texto", "Kein Text gefunden"),
+                icon: "text.viewfinder"
+            )
+        case .failed:
+            ToastManager.shared.show(
+                title: L10n.tr4("Text recognition unavailable", "Reconnaissance indisponible",
+                                "Reconocimiento no disponible", "Texterkennung nicht verfügbar"),
+                icon: "exclamationmark.triangle.fill"
+            )
         }
+    }
+
+    private nonisolated static func visionLanguage(for setting: String) -> String {
+        switch setting {
+        case "en": return "en-US"
+        case "es": return "es-ES"
+        case "de": return "de-DE"
+        default: return "fr-FR"
+        }
+    }
+
+    /// Le premier appel a Vision recharge son modele de reconnaissance. C'est immediat sur une
+    /// machine saine, mais cela peut prendre une minute quand le cache du Neural Engine n'est pas
+    /// conservé (disque sature, erreurs e5rt). On paie ce cout une fois au lancement, en tache de
+    /// fond, plutot que sur le premier raccourci de l'utilisateur.
+    nonisolated static func warmUpOCR() {
+        Task.detached(priority: .utility) {
+            let language = visionLanguage(for: UserDefaults.standard.string(forKey: "ocrLanguage") ?? "fr")
+            guard let sample = warmUpImage() else { return }
+            let started = Date()
+            let outcome = await recognize(sample, language, level: .accurate, timeout: .seconds(180))
+            if case .text = outcome {
+                ocrLog.info("prechauffage OCR reussi en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
+            } else {
+                ocrLog.error("prechauffage OCR echoue apres \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
+            }
+        }
+    }
+
+    /// Vision rejette une image sans texte (CRImageReaderError) : la mire de chauffe en contient.
+    private nonisolated static func warmUpImage() -> CGImage? {
+        let width = 240, height = 80
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { return nil }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let sample = NSAttributedString(string: "Orby 123", attributes: [
+            .font: NSFont.systemFont(ofSize: 36),
+            .foregroundColor: NSColor.black
+        ])
+        context.textPosition = CGPoint(x: 16, y: 24)
+        CTLineDraw(CTLineCreateWithAttributedString(sample), context)
+        return context.makeImage()
     }
 
     /// Reconnaissance de texte, volontairement hors du MainActor.
     /// L'ancienne implementation utilisait VNRecognizeTextRequest dans un withCheckedContinuation :
     /// depuis macOS 26 cette API appelle son completion handler *puis* relance l'erreur, ce qui
     /// resumait la continuation deux fois (SWIFT TASK CONTINUATION MISUSE) et gelait le main thread.
-    private nonisolated static func recognizeText(in cgImage: CGImage, language: String) async -> String? {
-        let identifier: String
-        switch language {
-        case "en": identifier = "en-US"
-        case "es": identifier = "es-ES"
-        case "de": identifier = "de-DE"
-        default: identifier = "fr-FR"
-        }
+    private nonisolated static func recognizeText(in cgImage: CGImage, language: String) async -> OCROutcome {
+        let identifier = visionLanguage(for: language)
 
-        var request = RecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.recognitionLanguages = [Locale.Language(identifier: identifier)]
-        request.usesLanguageCorrection = true
+        // Uniquement .accurate : mesure faite, .fast ne rend que 7 % du texte sur une capture
+        // reelle (68 caracteres contre 926). Mieux vaut echouer franchement que coller un texte
+        // tronque a l'insu de l'utilisateur. Le delai n'est la que pour ne jamais rester bloque.
+        return await recognize(cgImage, identifier, level: .accurate, timeout: .seconds(120))
+    }
 
-        do {
-            let observations = try await request.perform(on: cgImage)
-            let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-            let result = lines.joined(separator: "\n")
-            return result.isEmpty ? nil : result
-        } catch {
-            return nil
+    private nonisolated static func recognize(
+        _ cgImage: CGImage,
+        _ identifier: String,
+        level: RecognizeTextRequest.RecognitionLevel,
+        timeout: Duration
+    ) async -> OCROutcome {
+        await withTaskGroup(of: OCROutcome.self) { group in
+            group.addTask {
+                var request = RecognizeTextRequest()
+                request.recognitionLevel = level
+                request.recognitionLanguages = [Locale.Language(identifier: identifier)]
+                request.usesLanguageCorrection = true
+                do {
+                    let observations = try await request.perform(on: cgImage)
+                    let result = observations
+                        .compactMap { $0.topCandidates(1).first?.string }
+                        .joined(separator: "\n")
+                    return result.isEmpty ? .empty : .text(result)
+                } catch {
+                    ocrLog.error("Vision a echoue: \(error.localizedDescription, privacy: .public)")
+                    return .failed
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                ocrLog.error("Vision n'a pas repondu en \(timeout.components.seconds, privacy: .public)s")
+                return .failed
+            }
+            let first = await group.next() ?? .failed
+            group.cancelAll()
+            return first
         }
     }
 
@@ -110,7 +225,9 @@ class ScreenCaptureService {
                         continuation.resume(returning: nil)
                         return
                     }
-                    let image = NSImage(contentsOf: tempURL)
+                    // Charger les octets avant de supprimer : NSImage(contentsOf:) decode
+                    // paresseusement et perdrait son contenu avec le fichier temporaire.
+                    let image = (try? Data(contentsOf: tempURL)).flatMap(NSImage.init(data:))
                     try? FileManager.default.removeItem(at: tempURL)
                     continuation.resume(returning: image)
                 } catch {

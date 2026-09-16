@@ -7,7 +7,9 @@ class ToastManager {
 
     private var panel: NSPanel?
 
-    func show(title: String, subtitle: String? = nil) {
+    /// `autoDismiss: false` laisse le toast affiche jusqu'au prochain `show` ou a `hide()`,
+    /// pour signaler une operation en cours de duree inconnue.
+    func show(title: String, subtitle: String? = nil, icon: String = "checkmark.circle.fill", autoDismiss: Bool = true) {
         panel?.orderOut(nil)
 
         let theme = UserDefaults.standard.string(forKey: "appTheme") ?? "system"
@@ -20,7 +22,7 @@ class ToastManager {
             let style = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")
             isDark = style == "Dark"
         }
-        let toastView = ToastView(title: title, subtitle: subtitle, isDark: isDark)
+        let toastView = ToastView(title: title, subtitle: subtitle, icon: icon, isDark: isDark)
         let hostingView = NSHostingView(rootView: toastView)
         hostingView.setFrameSize(hostingView.fittingSize)
 
@@ -62,6 +64,8 @@ class ToastManager {
 
         self.panel = toast
 
+        guard autoDismiss else { return }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             guard let self, let panel = self.panel, panel === toast else { return }
             NSAnimationContext.runAnimationGroup { ctx in
@@ -80,6 +84,11 @@ class ToastManager {
         }
     }
 
+    func hide() {
+        panel?.orderOut(nil)
+        panel = nil
+    }
+
     // Legacy support
     func show(message: String, preview: String? = nil) {
         show(title: message, subtitle: preview)
@@ -91,6 +100,7 @@ class ToastManager {
 struct ToastView: View {
     let title: String
     let subtitle: String?
+    var icon: String = "checkmark.circle.fill"
     let isDark: Bool
 
     private var bgColor: Color { isDark ? Color(white: 0.2) : .white }
@@ -99,7 +109,7 @@ struct ToastView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: icon)
                 .foregroundStyle(brandPurple)
                 .font(.system(size: 18))
 
