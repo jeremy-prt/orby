@@ -3,6 +3,7 @@ import SwiftUI
 struct GeneralTabView: View {
     @AppStorage("appLanguage") private var appLanguage = "fr"
     @AppStorage("ocrLanguage") private var ocrLanguage = "fr"
+    @AppStorage("ocrFastMode") private var ocrFastMode = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("playSound") private var playSound = true
     @AppStorage("appTheme") private var appTheme = "system"
@@ -56,6 +57,15 @@ struct GeneralTabView: View {
                     Text("Deutsch").tag("de")
                 }
                 .pickerStyle(.menu)
+
+                Toggle(L10n.tr4("Fast mode", "Mode rapide", "Modo rápido", "Schnellmodus"),
+                       isOn: $ocrFastMode)
+                Text(L10n.tr4("Instant, but recognizes less text on dense screenshots.",
+                              "Instantané, mais reconnaît moins de texte sur les captures denses.",
+                              "Instantáneo, pero reconoce menos texto en capturas densas.",
+                              "Sofort, erkennt aber weniger Text bei dichten Aufnahmen."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.tr4("Text recognition (OCR)", "Reconnaissance de texte (OCR)", "Reconocimiento de texto (OCR)", "Texterkennung (OCR)")) {

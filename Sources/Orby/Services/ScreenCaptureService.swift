@@ -142,19 +142,32 @@ class ScreenCaptureService {
     private nonisolated static func recognizeText(in cgImage: CGImage, language: String) async -> OCROutcome {
         let identifier = visionLanguage(for: language)
 
-        // .accurate passe par le Neural Engine. Sur une machine saine il repond en moins d'une
-        // seconde ; quand le moteur est en defaut (erreur e5rt 13, « recompilation necessaire »,
-        // constatee sur macOS 27) il tourne plusieurs minutes sans jamais aboutir.
-        let outcome = await recognize(cgImage, identifier, level: .accurate, timeout: .seconds(10))
-        if case .failed = outcome {} else { return outcome }
+        // Mode rapide demande explicitement : .fast n'emprunte jamais le Neural Engine, donc il
+        // repond toujours en quelques centaines de millisecondes, au prix d'une partie du texte.
+        if UserDefaults.standard.bool(forKey: "ocrFastMode") {
+            guard let text = await recognizeFast(cgImage, identifier) else { return .failed }
+            return .text(text)
+        }
 
-        // Repli : .fast n'utilise que le CPU, jamais le Neural Engine, donc il repond meme quand
-        // .accurate est bloque. Il faut l'ancienne API : le .fast de RecognizeTextRequest ne rend
-        // aucune observation sur cette plateforme, celui de VNRecognizeTextRequest en rend.
-        // Le texte obtenu est incomplet, d'ou .partial : c'est signale a l'utilisateur.
-        ocrLog.info("OCR: .accurate indisponible, repli sur le mode rapide")
-        guard let fast = await recognizeFast(cgImage, identifier) else { return .failed }
-        return .partial(fast)
+        // Sinon les deux reconnaissances partent ensemble.
+        //
+        // .accurate est la bonne : sur une machine saine elle repond en moins d'une seconde et
+        // rend tout le texte. Mais elle passe par le Neural Engine, et quand celui-ci est en
+        // defaut (erreur e5rt 13, « recompilation necessaire », constatee sur macOS 27) elle
+        // tourne plusieurs minutes sans jamais aboutir. On lance donc .fast en parallele plutot
+        // qu'apres coup, pour qu'elle soit deja prete si .accurate se fait attendre.
+        async let accurate = recognize(cgImage, identifier, level: .accurate, timeout: .seconds(2.5))
+        async let fast = recognizeFast(cgImage, identifier)
+
+        let outcome = await accurate
+        if case .failed = outcome {} else {
+            _ = await fast
+            return outcome
+        }
+
+        ocrLog.info("OCR: .accurate indisponible, on garde le mode rapide")
+        guard let partial = await fast else { return .failed }
+        return .partial(partial)
     }
 
     private nonisolated static func recognizeFast(_ cgImage: CGImage, _ identifier: String) async -> String? {
