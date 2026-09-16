@@ -8,6 +8,8 @@ let ocrLog = Logger(subsystem: "com.local.Orby", category: "ocr")
 /// savoir s'il faut recadrer ou si Vision est indisponible.
 enum OCROutcome {
     case text(String)
+    /// Texte obtenu par le mode rapide, donc incomplet : l'utilisateur doit le savoir.
+    case partial(String)
     case empty
     case failed
 }
@@ -99,6 +101,17 @@ class ScreenCaptureService {
                 title: L10n.tr4("Text copied!", "Texte copié !", "¡Texto copiado!", "Text kopiert!"),
                 subtitle: truncated
             )
+        case .partial(let text):
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            ToastManager.shared.show(
+                title: L10n.tr4("Partial text copied", "Texte partiel copié",
+                                "Texto parcial copiado", "Teilweiser Text kopiert"),
+                subtitle: L10n.tr4("Fast mode, text may be incomplete", "Mode rapide, texte possiblement incomplet",
+                                   "Modo rápido, texto posiblemente incompleto", "Schnellmodus, Text evtl. unvollständig"),
+                icon: "exclamationmark.triangle.fill"
+            )
         case .empty:
             ToastManager.shared.show(
                 title: L10n.tr4("No text found", "Aucun texte trouvé", "No se encontró texto", "Kein Text gefunden"),
@@ -129,14 +142,41 @@ class ScreenCaptureService {
     private nonisolated static func recognizeText(in cgImage: CGImage, language: String) async -> OCROutcome {
         let identifier = visionLanguage(for: language)
 
-        // Uniquement .accurate : mesure faite, .fast ne rend que 7 % du texte sur une capture
-        // reelle (68 caracteres contre 926). Mieux vaut echouer franchement que coller un texte
-        // tronque a l'insu de l'utilisateur.
-        //
-        // 30 s de delai de garde : sur une machine saine la reconnaissance tient sous la seconde.
-        // Au-dela, c'est que le Neural Engine recompile son modele sans y parvenir (erreur e5rt,
-        // constatee sur macOS 27) ; inutile de faire patienter plus longtemps pour un echec.
-        return await recognize(cgImage, identifier, level: .accurate, timeout: .seconds(30))
+        // .accurate passe par le Neural Engine. Sur une machine saine il repond en moins d'une
+        // seconde ; quand le moteur est en defaut (erreur e5rt 13, « recompilation necessaire »,
+        // constatee sur macOS 27) il tourne plusieurs minutes sans jamais aboutir.
+        let outcome = await recognize(cgImage, identifier, level: .accurate, timeout: .seconds(10))
+        if case .failed = outcome {} else { return outcome }
+
+        // Repli : .fast n'utilise que le CPU, jamais le Neural Engine, donc il repond meme quand
+        // .accurate est bloque. Il faut l'ancienne API : le .fast de RecognizeTextRequest ne rend
+        // aucune observation sur cette plateforme, celui de VNRecognizeTextRequest en rend.
+        // Le texte obtenu est incomplet, d'ou .partial : c'est signale a l'utilisateur.
+        ocrLog.info("OCR: .accurate indisponible, repli sur le mode rapide")
+        guard let fast = await recognizeFast(cgImage, identifier) else { return .failed }
+        return .partial(fast)
+    }
+
+    private nonisolated static func recognizeFast(_ cgImage: CGImage, _ identifier: String) async -> String? {
+        await withCheckedContinuation { continuation in
+            // perform() est synchrone : on l'appelle sur une file de fond, sans completion
+            // handler, ce qui garantit une reprise unique de la continuation.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .fast
+                request.recognitionLanguages = [identifier]
+                request.usesLanguageCorrection = true
+                do {
+                    try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
+                    let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                    let result = lines.joined(separator: "\n")
+                    continuation.resume(returning: result.isEmpty ? nil : result)
+                } catch {
+                    ocrLog.error("Mode rapide en echec: \(error.localizedDescription, privacy: .public)")
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
     }
 
     private nonisolated static func recognize(
