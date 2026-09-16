@@ -1,8 +1,12 @@
 import AppKit
-import OSLog
+import os
 import Vision
 
 let ocrLog = Logger(subsystem: "com.local.Orby", category: "ocr")
+
+/// Date du dernier echec de .accurate. Quand le Neural Engine est en defaut, il le reste :
+/// inutile de refaire patienter l'utilisateur a chaque capture.
+private let accurateFailure = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
 /// Distingue une capture sans texte d'une reconnaissance qui a echoue : l'utilisateur doit
 /// savoir s'il faut recadrer ou si Vision est indisponible.
@@ -74,43 +78,22 @@ class ScreenCaptureService {
         let ocrLang = UserDefaults.standard.string(forKey: "ocrLanguage") ?? "fr"
         let started = Date()
 
-        // Vision peut mettre jusqu'a une minute a recompiler son modele apres une mise a jour
-        // de macOS : sans ce toast, l'app parait simplement figee.
-        let pending = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            ToastManager.shared.show(
-                title: L10n.tr4("Reading text...", "Lecture du texte...", "Leyendo texto...", "Text wird gelesen..."),
-                icon: "text.viewfinder",
-                autoDismiss: false
-            )
-        }
-
         let outcome = await Self.recognizeText(in: cgImage, language: ocrLang)
-        pending.cancel()
         ocrLog.info("OCR en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
 
         switch outcome {
         case .text(let text):
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-            let flat = text.replacingOccurrences(of: "\n", with: " ")
-            let truncated = flat.count > 50 ? String(flat.prefix(50)) + "..." : flat
+            copyToPasteboard(text)
             ToastManager.shared.show(
                 title: L10n.tr4("Text copied!", "Texte copié !", "¡Texto copiado!", "Text kopiert!"),
-                subtitle: truncated
+                subtitle: preview(of: text)
             )
         case .partial(let text):
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
+            copyToPasteboard(text)
             ToastManager.shared.show(
                 title: L10n.tr4("Partial text copied", "Texte partiel copié",
                                 "Texto parcial copiado", "Teilweiser Text kopiert"),
-                subtitle: L10n.tr4("Fast mode, text may be incomplete", "Mode rapide, texte possiblement incomplet",
-                                   "Modo rápido, texto posiblemente incompleto", "Schnellmodus, Text evtl. unvollständig"),
-                icon: "exclamationmark.triangle.fill"
+                subtitle: preview(of: text)
             )
         case .empty:
             ToastManager.shared.show(
@@ -124,6 +107,17 @@ class ScreenCaptureService {
                 icon: "exclamationmark.triangle.fill"
             )
         }
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func preview(of text: String) -> String {
+        let flat = text.replacingOccurrences(of: "\n", with: " ")
+        return flat.count > 50 ? String(flat.prefix(50)) + "..." : flat
     }
 
     private nonisolated static func visionLanguage(for setting: String) -> String {
@@ -149,6 +143,14 @@ class ScreenCaptureService {
             return .text(text)
         }
 
+        // .accurate a echoue recemment : le Neural Engine ne se repare pas tout seul en quelques
+        // minutes, on ne refait pas patienter l'utilisateur pour rien.
+        let lastFailure = accurateFailure.withLock { $0 }
+        if let lastFailure, Date().timeIntervalSince(lastFailure) < 600 {
+            guard let text = await recognizeFast(cgImage, identifier) else { return .failed }
+            return .partial(text)
+        }
+
         // Sinon les deux reconnaissances partent ensemble.
         //
         // .accurate est la bonne : sur une machine saine elle repond en moins d'une seconde et
@@ -160,16 +162,21 @@ class ScreenCaptureService {
         async let fast = recognizeFast(cgImage, identifier)
 
         let outcome = await accurate
-        if case .failed = outcome {} else {
-            _ = await fast
+        guard case .failed = outcome else {
+            _ = await fast   // consomme la tache concurrente
+            accurateFailure.withLock { $0 = nil }
             return outcome
         }
 
-        ocrLog.info("OCR: .accurate indisponible, on garde le mode rapide")
+        accurateFailure.withLock { $0 = Date() }
+        ocrLog.info("OCR: .accurate indisponible, mode rapide pour les 10 prochaines minutes")
         guard let partial = await fast else { return .failed }
         return .partial(partial)
     }
 
+    /// Volontairement sur l'ancienne API : le mode rapide de `RecognizeTextRequest` ne rend
+    /// aucune observation sur macOS 26+, celui de `VNRecognizeTextRequest` en rend. Unifier les
+    /// deux chemins sur l'API moderne casserait donc le repli.
     private nonisolated static func recognizeFast(_ cgImage: CGImage, _ identifier: String) async -> String? {
         await withCheckedContinuation { continuation in
             // perform() est synchrone : on l'appelle sur une file de fond, sans completion

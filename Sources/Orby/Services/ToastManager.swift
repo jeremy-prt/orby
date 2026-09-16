@@ -7,9 +7,7 @@ class ToastManager {
 
     private var panel: NSPanel?
 
-    /// `autoDismiss: false` laisse le toast affiche jusqu'au prochain `show` ou a `hide()`,
-    /// pour signaler une operation en cours de duree inconnue.
-    func show(title: String, subtitle: String? = nil, icon: String = "checkmark.circle.fill", autoDismiss: Bool = true) {
+    func show(title: String, subtitle: String? = nil, icon: String = "checkmark.circle.fill") {
         panel?.orderOut(nil)
 
         let theme = UserDefaults.standard.string(forKey: "appTheme") ?? "system"
@@ -64,8 +62,6 @@ class ToastManager {
 
         self.panel = toast
 
-        guard autoDismiss else { return }
-
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             guard let self, let panel = self.panel, panel === toast else { return }
             NSAnimationContext.runAnimationGroup { ctx in
@@ -82,11 +78,6 @@ class ToastManager {
                 self.panel = nil
             }
         }
-    }
-
-    func hide() {
-        panel?.orderOut(nil)
-        panel = nil
     }
 
     // Legacy support
