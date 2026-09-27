@@ -8,6 +8,8 @@ let ocrLog = Logger(subsystem: "com.local.Orby", category: "ocr")
 /// inutile de refaire patienter l'utilisateur a chaque capture.
 private let accurateFailure = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
+private let accurateInFlight = OSAllocatedUnfairLock<Task<OCROutcome, Never>?>(initialState: nil)
+
 /// Distingue une capture sans texte d'une reconnaissance qui a echoue : l'utilisateur doit
 /// savoir s'il faut recadrer ou si Vision est indisponible.
 enum OCROutcome {
@@ -151,27 +153,71 @@ class ScreenCaptureService {
             return .partial(text)
         }
 
-        // Sinon les deux reconnaissances partent ensemble.
-        //
-        // .accurate est la bonne : sur une machine saine elle repond en moins d'une seconde et
-        // rend tout le texte. Mais elle passe par le Neural Engine, et quand celui-ci est en
-        // defaut (erreur e5rt 13, « recompilation necessaire », constatee sur macOS 27) elle
-        // tourne plusieurs minutes sans jamais aboutir. On lance donc .fast en parallele plutot
-        // qu'apres coup, pour qu'elle soit deja prete si .accurate se fait attendre.
-        async let accurate = recognize(cgImage, identifier, level: .accurate, timeout: .seconds(2.5))
-        async let fast = recognizeFast(cgImage, identifier)
-
-        let outcome = await accurate
-        guard case .failed = outcome else {
-            _ = await fast   // consomme la tache concurrente
-            accurateFailure.withLock { $0 = nil }
-            return outcome
+        // Une compilation du modele est deja en cours : on ne l'empile pas, on rend le rapide.
+        guard let accurate = startAccurate(cgImage, identifier) else {
+            guard let text = await recognizeFast(cgImage, identifier) else { return .failed }
+            return .partial(text)
         }
 
-        accurateFailure.withLock { $0 = Date() }
-        ocrLog.info("OCR: .accurate indisponible, mode rapide pour les 10 prochaines minutes")
-        guard let partial = await fast else { return .failed }
-        return .partial(partial)
+        async let fast = recognizeFast(cgImage, identifier)
+
+        switch await firstResult(of: accurate, within: .seconds(2.5)) {
+        case .text(let text)?:
+            _ = await fast   // consomme la tache concurrente
+            return .text(text)
+        case .empty?:
+            _ = await fast
+            return .empty
+        default:
+            guard let partial = await fast else { return .failed }
+            return .partial(partial)
+        }
+    }
+
+    /// Le premier .accurate apres une mise a jour de macOS compile le modele du Neural Engine
+    /// (environ une minute), puis macOS le met en cache pour l'app. L'annuler empeche ce cache
+    /// de se remplir et condamne chaque capture suivante au mode rapide : on la laisse finir.
+    private nonisolated static func startAccurate(_ cgImage: CGImage, _ identifier: String) -> Task<OCROutcome, Never>? {
+        accurateInFlight.withLock { current in
+            guard current == nil else { return nil }
+            let task = Task.detached(priority: .userInitiated) {
+                let started = Date()
+                let outcome = await recognizeAccurate(cgImage, identifier)
+                accurateInFlight.withLock { $0 = nil }
+                if case .failed = outcome {
+                    accurateFailure.withLock { $0 = Date() }
+                    ocrLog.info("OCR: .accurate indisponible, mode rapide pour les 10 prochaines minutes")
+                } else {
+                    accurateFailure.withLock { $0 = nil }
+                }
+                ocrLog.info(".accurate termine en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public)s")
+                return outcome
+            }
+            current = task
+            return task
+        }
+    }
+
+    /// Attend `task` au plus `timeout`, sans l'annuler s'il deborde.
+    private nonisolated static func firstResult(
+        of task: Task<OCROutcome, Never>,
+        within timeout: Duration
+    ) async -> OCROutcome? {
+        await withCheckedContinuation { continuation in
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+            let resume: @Sendable (OCROutcome?) -> Void = { value in
+                let first = resumed.withLock { done in
+                    defer { done = true }
+                    return !done
+                }
+                if first { continuation.resume(returning: value) }
+            }
+            Task { resume(await task.value) }
+            Task {
+                try? await Task.sleep(for: timeout)
+                resume(nil)
+            }
+        }
     }
 
     /// Volontairement sur l'ancienne API : le mode rapide de `RecognizeTextRequest` ne rend
@@ -199,37 +245,20 @@ class ScreenCaptureService {
         }
     }
 
-    private nonisolated static func recognize(
-        _ cgImage: CGImage,
-        _ identifier: String,
-        level: RecognizeTextRequest.RecognitionLevel,
-        timeout: Duration
-    ) async -> OCROutcome {
-        await withTaskGroup(of: OCROutcome.self) { group in
-            group.addTask {
-                var request = RecognizeTextRequest()
-                request.recognitionLevel = level
-                request.recognitionLanguages = [Locale.Language(identifier: identifier)]
-                request.usesLanguageCorrection = true
-                do {
-                    let observations = try await request.perform(on: cgImage)
-                    let result = observations
-                        .compactMap { $0.topCandidates(1).first?.string }
-                        .joined(separator: "\n")
-                    return result.isEmpty ? .empty : .text(result)
-                } catch {
-                    ocrLog.error("Vision a echoue: \(error.localizedDescription, privacy: .public)")
-                    return .failed
-                }
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                ocrLog.error("Vision n'a pas repondu en \(timeout.components.seconds, privacy: .public)s")
-                return .failed
-            }
-            let first = await group.next() ?? .failed
-            group.cancelAll()
-            return first
+    private nonisolated static func recognizeAccurate(_ cgImage: CGImage, _ identifier: String) async -> OCROutcome {
+        var request = RecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = [Locale.Language(identifier: identifier)]
+        request.usesLanguageCorrection = true
+        do {
+            let observations = try await request.perform(on: cgImage)
+            let result = observations
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
+            return result.isEmpty ? .empty : .text(result)
+        } catch {
+            ocrLog.error("Vision a echoue: \(error.localizedDescription, privacy: .public)")
+            return .failed
         }
     }
 
