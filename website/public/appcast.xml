@@ -4,6 +4,25 @@
         <title>Orby Updates</title>
         <language>en</language>
         <item>
+            <title>Version 1.1.2</title>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <h2>Orby 1.1.2</h2>
+                <ul>
+                    <li>Text recognition is accurate and fast again on macOS 27: after a macOS update, the first recognition prepares its model once in the background (about a minute), then every recognition is complete and instant</li>
+                </ul>
+            ]]></description>
+            <pubDate>Sun, 27 Sep 2026 11:00:00 +0200</pubDate>
+            <enclosure
+                url="https://github.com/jeremy-prt/orby/releases/download/v1.1.2/Orby.dmg"
+                sparkle:edSignature="ERkEtNEq1Gh0sY8h/H60HO+bW5YHLu21hOUbCtYV/Pc0S9fOofNdka37rkw7ewjV0v6+5ryXvC5Q1K6pdJ+yDw=="
+                length="3106804"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.1.1</title>
             <sparkle:version>3</sparkle:version>
             <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
