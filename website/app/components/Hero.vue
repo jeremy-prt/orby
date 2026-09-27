@@ -54,7 +54,10 @@
     <section ref="mockupSection" class="relative flex items-center justify-center py-10 md:py-20 px-6 md:min-h-[80vh]">
       <div class="max-w-3xl w-full mx-auto">
         <div ref="mockup" class="will-change-transform origin-center">
-          <img src="/hero.svg" alt="Orby editor" class="w-full h-auto" />
+          <picture>
+            <source srcset="/hero.svg" media="(min-width: 768px)" type="image/svg+xml" />
+            <img src="/hero.png" alt="Orby editor" class="w-full h-auto" />
+          </picture>
         </div>
       </div>
     </section>
